@@ -174,14 +174,15 @@ What the signature must have, and what `pnpm verify:macos --distribution` checks
 
 Local signing and public distribution differ:
 
-| Build                                       | Signature                                  | Gatekeeper on a downloaded copy | Use                                |
-| ------------------------------------------- | ------------------------------------------ | ------------------------------- | ---------------------------------- |
-| Default (`pnpm tauri build`, CI)            | ad hoc (`signingIdentity: "-"`)            | rejected                        | CI smoke bundle, local builds      |
-| `Snipvero Local Development` (ADR-011)      | self-signed, this Mac only                 | rejected                        | keeping the Screen Recording grant |
-| Developer ID + notarized + stapled (§6, §7) | Developer ID Application, secure timestamp | accepted                        | the only build to publish          |
+| Build                                       | Signature                                  | Gatekeeper on a downloaded copy | Use                                                               |
+| ------------------------------------------- | ------------------------------------------ | ------------------------------- | ----------------------------------------------------------------- |
+| Default (`pnpm tauri build`, CI)            | ad hoc (`signingIdentity: "-"`)            | rejected                        | CI smoke bundle, local builds, unnotarized pre-releases (ADR-025) |
+| `Snipvero Local Development` (ADR-011)      | self-signed, this Mac only                 | rejected                        | keeping the Screen Recording grant                                |
+| Developer ID + notarized + stapled (§6, §7) | Developer ID Application, secure timestamp | accepted                        | the build to publish once available                               |
 
-An ad-hoc build passes `pnpm verify:macos` but is never a public build; only
-`pnpm verify:macos --distribution` passing makes it one.
+Only `pnpm verify:macos --distribution` passing makes a build Apple-verified. Until a Developer ID
+exists, a release-profile ad-hoc build that passes `pnpm verify:macos` may be published as a
+**pre-release** whose notes say it is not signed with a Developer ID or notarized (ADR-025, §9).
 
 ### Signing in GitHub Actions (not set up)
 
@@ -267,7 +268,18 @@ quarantined), install it, launch it, grant Screen Recording, take a capture, cop
 ## 9. Publish
 
 Done by a maintainer, by hand: create a **draft** GitHub Release for tag `v<package version>`,
-mark it as a pre-release, attach the DMG, its SHA-256 checksum and `THIRD_PARTY_NOTICES.txt`,
-review, then publish. If the build is not notarized, say so in the release notes and link to the
-README's installation section. The repository is private at the time of writing: a public release,
-and the README's links to it, need its visibility changed first (the maintainer's decision).
+mark it as a pre-release, attach the DMG and `SHA256SUMS.txt`, review, then publish. Write the
+checksum file from inside the bundle directory, so it names the file without a local path:
+
+```sh
+cd src-tauri/target/release/bundle/dmg
+shasum -a 256 Snipvero_0.1.0-beta.1_aarch64.dmg > SHA256SUMS.txt
+shasum -a 256 -c SHA256SUMS.txt
+```
+
+`LICENSE` and `THIRD_PARTY_NOTICES.txt` travel inside the app (§3) and in the tagged source. If
+the build is not notarized, say so in the release notes, describe Gatekeeper's **Open Anyway**
+step (System Settings → Privacy & Security) and link to the README's Download section; never
+suggest turning off Gatekeeper or removing the quarantine attribute. A public release, and the
+README's links to it, need a public repository (changing visibility is the maintainer's
+decision).

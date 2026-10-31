@@ -484,3 +484,22 @@ Contributors`. Tauri does not embed `bundle.homepage` or `bundle.copyright` in t
   app (macOS 27, dark): main window 520 × 504 pt frame with the footer and GitHub link visible and
   no scroll bar; About window 360 × 420 pt with all rows visible. Not verified: clicking the tray
   **About Snipvero** item and the links in the running app, and the light appearance there.
+
+## ADR-025: First beta published ad hoc, without Developer ID or notarization
+
+- **Status:** accepted (2026-10-31), user decision. Built and verified on macOS (Apple silicon)
+  only; the Gatekeeper flow of a downloaded copy was not tried on another Mac.
+- **Context:** RELEASE.md made a Developer ID signature with notarization the only publishable
+  build. The project has no Apple Developer Program membership, so no Developer ID certificate or
+  notarization credentials exist, and building from source was the only way to install Snipvero.
+- **Decision:** `0.1.0-beta.1` is published as a GitHub **pre-release** with the release-profile,
+  ad-hoc signed `Snipvero_0.1.0-beta.1_aarch64.dmg` (Apple silicon, macOS 14+) and
+  `SHA256SUMS.txt`. It must pass `pnpm verify:macos` (not `--distribution`). The release notes and
+  README state that it is not signed with a Developer ID and not notarized, describe Gatekeeper's
+  **Open Anyway** step in System Settings → Privacy & Security, and never suggest disabling
+  Gatekeeper or removing the quarantine attribute. No Windows asset is published.
+- **Consequences:** macOS blocks the first launch until the user approves it. The Screen Recording
+  grant is tied to the ad-hoc signature of this build; a later Developer ID build needs the
+  permission granted again once (RELEASE.md §6). Once a Developer ID exists, ADR-020's path
+  (Developer ID, notarization, `--distribution`) applies again and this exception ends.
+- **Dependencies:** none added.
