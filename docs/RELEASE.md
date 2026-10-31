@@ -93,9 +93,15 @@ Attach `THIRD_PARTY_NOTICES.txt` to the GitHub Release as well.
 pnpm install --frozen-lockfile
 pnpm check && pnpm notices:check && pnpm build
 (cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test)
-pnpm tauri build --bundles app,dmg
+RUSTFLAGS="--remap-path-prefix=$HOME/.cargo/registry/src=/cargo/registry/src --remap-path-prefix=$HOME/.rustup=/rustup --remap-path-prefix=$PWD=/snipvero" \
+  pnpm tauri build --bundles app,dmg
 pnpm verify:macos
+strings src-tauri/target/release/bundle/macos/Snipvero.app/Contents/MacOS/snipvero | grep -c "$HOME"   # expect 0
 ```
+
+Rust keeps the source paths of panic locations in the binary; without the remapping, a release
+binary carries about 300 paths under the builder's home directory (and so the account name).
+Changing `RUSTFLAGS` rebuilds every crate once.
 
 Output in `src-tauri/target/release/bundle/`:
 
