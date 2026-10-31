@@ -1,0 +1,46 @@
+# Node.js
+node_modules
+.pnpm-store
+.pnpm-debug.log*
+npm-debug.log*
+*.log
+
+# Frontend build / test output
+dist
+coverage
+*.tsbuildinfo
+.vite
+
+# Rust / Tauri
+target/
+src-tauri/target
+src-tauri/gen
+*.rs.bk
+
+# Temporary files
+*.tmp
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Local configuration and editor state
+.env
+.env.*
+!.env.example
+*.local
+.vscode/*
+!.vscode/extensions.json
+.idea
+
+# Local development log (AGENTS.md); kept out of the repository
+docs/PROGRESS.md
+
+# Secrets and signing material
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.mobileprovision
+*.provisionprofile

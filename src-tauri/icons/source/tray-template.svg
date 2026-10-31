@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
+  <!-- macOS template image: black and alpha only; the menu bar tints it for light and dark. -->
+  <g fill="none" stroke="#000000" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 14V5h9M22 5h9v9M31 22v9h-9M14 31H5v-9"/>
+  </g>
+</svg>

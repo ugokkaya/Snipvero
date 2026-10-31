@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "about",
+  "description": "The About window closes itself on Escape.",
+  "windows": ["about"],
+  "permissions": ["core:window:allow-close"]
+}

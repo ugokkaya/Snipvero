@@ -1,0 +1,55 @@
+[package]
+name = "snipvero"
+version = "0.1.0-beta.1"
+description = "Open-source screenshot and annotation tool for macOS."
+authors = ["Snipvero contributors"]
+license = "MIT"
+repository = "https://github.com/ugokkaya/Snipvero"
+edition = "2024"
+rust-version = "1.90"
+publish = false
+
+[lib]
+name = "snipvero_lib"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+tauri-plugin-global-shortcut = "2"
+# PNG export; already in Tauri's dependency tree (ADR-007, ADR-018).
+png = "0.18"
+# Native save dialog (NSSavePanel / IFileSaveDialog). No Linux backend is needed (ADR-018).
+rfd = { version = "0.17", default-features = false }
+
+# Native capture, overlay window control and focus restoration. Same objc2 versions Tauri already uses (ADR-008).
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "NSArray", "NSData", "NSError", "NSGeometry", "NSNotification", "NSOperation", "NSString", "NSURL"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "libc", "NSApplication", "NSBitmapImageRep", "NSGraphics", "NSImageRep", "NSPasteboard", "NSPasteboardItem", "NSResponder", "NSRunningApplication", "NSScreen", "NSWindow", "NSWorkspace"] }
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFCGTypes", "CFData"] }
+objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGDataProvider", "CGEvent", "CGEventTypes", "CGImage", "CGWindow"] }
+objc2-screen-capture-kit = { version = "0.3", default-features = false, features = [
+    "std",
+    "block2",
+    "libc",
+    "objc2-core-foundation",
+    "objc2-core-graphics",
+    "SCScreenshotManager",
+    "SCShareableContent",
+    "SCStream",
+] }
+
+# Clipboard image (CF_DIBV5 + PNG) on Windows; macOS writes NSPasteboard directly (ADR-018).
+[target.'cfg(target_os = "windows")'.dependencies]
+arboard = { version = "3", default-features = false, features = ["image-data"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+panic = "abort"
+strip = true

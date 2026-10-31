@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Frontend checks
+        run: pnpm check
+
+      # License policy and THIRD_PARTY_NOTICES.txt freshness; the file covers both platforms.
+      - name: Third-party notices
+        if: matrix.os == 'macos-latest'
+        run: pnpm notices:check
+
+      # tauri::generate_context! embeds ../dist, so the frontend must be built before Rust compiles.
+      - name: Build frontend
+        run: pnpm build
+
+      - name: cargo fmt
+        run: cargo fmt --check
+        working-directory: src-tauri
+
+      - name: cargo clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+        working-directory: src-tauri
+
+      - name: cargo test
+        run: cargo test --locked
+        working-directory: src-tauri
+
+      - name: Bundle (smoke test)
+        run: pnpm tauri build --debug --bundles ${{ matrix.os == 'macos-latest' && 'app,dmg' || 'nsis' }}
+
+      - name: Verify macOS app and DMG
+        if: matrix.os == 'macos-latest'
+        run: pnpm verify:macos --bundle-dir src-tauri/target/debug/bundle

@@ -1,0 +1,486 @@
+# Architectural decisions
+
+Lightweight ADRs. Newest last. Do not rewrite accepted entries: supersede them with a new one.
+
+## ADR-001: Stack: Tauri 2, React + TypeScript, Rust, Konva.js
+
+- **Status:** accepted (2026-10-29)
+- **Context:** Cross-platform desktop app that must start fast and stay light in the background.
+- **Decision:** Tauri 2 with the system webview. React/TS for UI. Konva.js (+ react-konva) for annotations,
+  added with the annotation tools. Rust for lifecycle, tray, shortcuts, capture, clipboard and file output.
+- **Consequences:** Much smaller footprint than Electron. Rendering differs slightly between WebKit
+  and Chromium. Webview window creation latency must be handled (pre-warming overlays, ADR-013).
+
+## ADR-002: Platform targets and identity
+
+- **Status:** accepted (2026-10-29)
+- **Decision:** Name **Snipvero**, identifier `com.snipvero.app`. macOS 14+ (enables
+  `SCScreenshotManager`), Windows 10 1903+ and 11. Default shortcut `Cmd+Shift+2` / `Ctrl+Shift+2`.
+  pnpm as package manager. MIT license.
+
+## ADR-003: MVP scope and abstraction policy
+
+- **Status:** accepted (2026-10-29)
+- **Decision:** A working MVP comes first. No abstraction without a second real use. Platform-specific
+  code only where necessary. Cross-monitor selection, launch at login and customization UI are out
+  of the MVP. The 150 ms shortcut-to-overlay latency is an optimization target, not an MVP gate.
+
+## ADR-004: Background app lifecycle
+
+- **Status:** accepted (2026-10-29)
+- **Decision:** On macOS, use `ActivationPolicy::Accessory` at runtime plus `LSUIElement` in `Info.plist`
+  (no Dock icon). Closing the main window hides it. Only the tray Exit item quits. Implicit exit
+  requests are prevented. `tauri-plugin-single-instance` (registered first) focuses the existing instance.
+- **Alternatives:** A hidden main window at launch was rejected for now: on first run the user would
+  see nothing. Revisit when onboarding exists.
+- **Tray menu:** **Capture**, **Open Snipvero**, **Exit** (macOS label: "Quit Snipvero"). "Open Snipvero"
+  was added because a hidden main window would otherwise only be reachable by relaunching the app.
+  **About Snipvero** was added above Quit later (ADR-024).
+
+## ADR-005: Minimal dependencies and tooling
+
+- **Status:** accepted (2026-10-29)
+- **Decision:** Rust: `tauri` (`tray-icon` feature) and `tauri-plugin-single-instance` only. No logging
+  framework yet (`eprintln!` for the rare error path). Frontend: React, `@tauri-apps/api`. Dev:
+  Vite, Vitest, ESLint (typescript-eslint strict), Prettier.
+- **Note:** TypeScript is pinned to `~6.0` because typescript-eslint does not yet support TypeScript 7.
+
+## ADR-006: Frame transport is decided by benchmark
+
+- **Status:** superseded by ADR-007 (2026-10-29).
+- **Context:** A 5K Retina frame is ~59 MB of RGBA. JSON IPC is not an option.
+- **Options:** (a) Tauri binary IPC response (`ArrayBuffer`); (b) custom URI scheme (`snip://`) serving
+  BMP or raw RGBA; (c) PNG-encoded bytes via either channel.
+- **Decision criteria:** time from capture to first painted overlay on a 4K/5K display, peak memory,
+  and implementation complexity. Prefer the simplest option that is fast enough.
+
+## ADR-007: Frame transport: raw RGBA over Tauri IPC; no custom URI scheme
+
+- **Status:** accepted (2026-10-29). Measured on macOS only.
+- **Context:** the capture spike benchmarked seven methods on a release build (macOS 27.0.1, Apple Silicon,
+  displays 3024×1964 @2× and 2× 1920×1080 @1×). Transfer + decode + draw of a 3024×1964 frame:
+  raw RGBA over IPC 16 ms, BMP over IPC 41–45 ms, PNG over IPC 79–138 ms, BMP over a custom
+  scheme 32 ms (1920×1080: 6–7, 12–15, 21–24 and 11–12 ms).
+- **Decision:** Overlays load frames with `invoke("overlay_frame", { format: "rgba" })`, which returns
+  `tauri::ipc::Response` raw bytes → `ImageData` → `createImageBitmap` → canvas.
+  The experimental `snipframe://` scheme (BMP) stays in the temporary spike harness only and is
+  not adopted. It was not faster than IPC and adds a protocol, CORS headers and canvas tainting.
+- **Critical finding:** the CSP **must** allow Tauri's IPC protocol
+  (`connect-src 'self' ipc: http://ipc.localhost`). With `default-src 'self'` alone, Tauri silently
+  falls back to `postMessage` IPC. An 8 MB frame then took 159 ms instead of 5 ms.
+- **Rejected:** PNG (encode 25–45 ms in Rust plus slower decode) and BMP (cheapest Rust encode,
+  but slower WebKit decode than `ImageData`).
+- **Dependency:** `png` 0.18 (MIT/Apache-2.0) was already in Tauri's tree. It is used by the benchmark
+  now and will be used for PNG export. `serde` (MIT/Apache-2.0) is used for command payloads.
+
+## ADR-008: Capture interface and backends
+
+- **Status:** accepted for macOS (2026-10-29). Windows is investigated, **not implemented or tested**.
+- **Interface** (`src-tauri/src/capture/mod.rs`): free functions `has_permission`,
+  `request_permission` and `capture_displays() -> (Vec<Frame>, CaptureTimings)`. `Frame` has tightly packed BGRA8 pixels,
+  logical display bounds and a scale factor. No trait, because there is only one implementation per OS
+  (`#[cfg]` dispatch), per ADR-003. Non-macOS builds return `CaptureError::Unsupported`.
+- **macOS:** ScreenCaptureKit via `objc2-screen-capture-kit` 0.3 (Zlib/MIT/Apache-2.0, same objc2
+  0.3/0.6 stack Tauri already uses):
+  - `SCShareableContent` enumerates the displays.
+  - `SCContentFilter` per display excludes Snipvero's own windows.
+  - `SCShareableContent.infoForFilter().pointPixelScale` gives the scale (macOS 14+).
+  - `SCScreenshotManager.captureImage` returns a BGRA `CGImage`; all displays are captured concurrently.
+  - Permission uses `CGPreflightScreenCaptureAccess` / `CGRequestScreenCaptureAccess`.
+  - **Display geometry comes from `SCDisplay.frame` (points), not Tauri's monitor API.** On mixed-DPI
+    setups, Tauri's monitor positions mix units: for example, an external 1× display right of a
+    1512-pt Retina panel reports x = 1512 "physical".
+  - `captureImageInRect` (one call for all displays) needs macOS 15.2, above our macOS 14 minimum.
+- **Windows options (not tested; to evaluate in a Windows spike):**
+  - _GDI `BitBlt` per monitor:_ `EnumDisplayMonitors` plus a screen DC, with Per-Monitor-V2 DPI
+    awareness for physical pixels, and `CAPTUREBLT` for layered windows. Simplest, works on every
+    supported version; speed on large desktops is unknown. **Recommended first attempt.**
+  - _DXGI Desktop Duplication:_ fast GPU path per output (Windows 8+). Needs D3D11 setup, must use
+    the adapter that owns the output (hybrid-GPU laptops), and must handle rotation. Protected content is black.
+  - _Windows.Graphics.Capture:_ modern API, `CreateForMonitor` (1903+). It is asynchronous and
+    D3D-based. Windows 10 draws a yellow capture border; disabling it (`IsBorderRequired`) needs Windows 11.
+  - All of these deliver physical pixels in virtual-screen coordinates, which can be negative.
+    The `LogicalRect` semantics for Windows must be settled then.
+
+## ADR-009: Overlay windows
+
+- **Status:** accepted (2026-10-29). Verified on macOS only.
+- **Decision:** one borderless, opaque, non-resizable webview window per display (`overlay-<index>`),
+  created hidden after capture and shown when the page reports the frame is painted (`overlay_ready`).
+  This avoids an empty flash. On macOS, `overlay/macos.rs` sets:
+  - `NSScreenSaverWindowLevel`, because Tauri's `always_on_top` level sits below the menu bar;
+  - collection behaviour `CanJoinAllSpaces | FullScreenAuxiliary | Stationary | IgnoresCycle`;
+  - the exact frame, converted to Cocoa coordinates.
+
+  The overlay on the display under the cursor (`CGEvent` location) gets keyboard focus. Escape on
+  any overlay cancels all overlays and drops the frames.
+
+- **Known cost:** windows are created cold for every capture: 255–346 ms from capture start to visible.
+  Pre-warming hidden overlays is the main lever for the 150 ms target (NFR-4, an optimization target).
+
+## ADR-010: macOS development signing and Screen Recording permission
+
+- **Status:** accepted (2026-10-29); the deferred part is decided in ADR-011.
+- **Context:** macOS ties the Screen Recording grant to the code signature. An ad-hoc build
+  (`signingIdentity: "-"`, now set in `tauri.conf.json`) gets a new signature on every rebuild, so the
+  grant stops applying (observed during the capture spike). Launching the binary from a terminal attributes the request
+  to the terminal app instead.
+- **Decision:** test capture from the bundled `.app`, launched via Finder or `open`. After each rebuild, run
+  `tccutil reset ScreenCapture com.snipvero.app` and grant again. A stable self-signed "Snipvero Dev"
+  signing certificate would remove this friction, but it modifies the developer's keychain.
+  Deferred until the user decides.
+
+## ADR-011: Stable local signing identity for macOS development
+
+- **Status:** accepted (2026-10-29), with the user's approval. Supersedes the "deferred" part of ADR-010.
+- **Decision:** local macOS builds that need Screen Recording are signed with a self-signed
+  code-signing certificate, "Snipvero Local Development", stored in the developer's login keychain:
+  - RSA 2048, valid 3 years, extended key usage `codeSigning` only;
+  - **not** marked trusted; no admin rights or system trust settings were changed;
+  - `codesign` was allowed to use the key once via the keychain "Always Allow" dialog.
+
+  The identity is passed only through the environment:
+  `APPLE_SIGNING_IDENTITY="Snipvero Local Development" pnpm tauri build --bundles app`.
+  `tauri.conf.json` stays ad-hoc (`"-"`), so other contributors and CI are unaffected. No certificate
+  or key is in the repository.
+
+- **Effect (measured):** the signature requirement changed from `cdhash H"…"` (new on every build) to
+  `identifier "com.snipvero.app" and certificate leaf = H"7dfd35fd…"`. The Screen Recording grant
+  survived two rebuilds with no prompt.
+- **Undo:** `security delete-identity -c "Snipvero Local Development"` and
+  `tccutil reset ScreenCapture com.snipvero.app`.
+- **Not for distribution:** public releases need a Developer ID certificate and notarization (ADR-020, RELEASE.md).
+
+## ADR-012: Separate type-checking for Node-side config files
+
+- **Status:** accepted (2026-10-29).
+- **Context:** the first CI run failed on both runners: `tsc` could not find `process` in `vite.config.ts`.
+  It had passed locally only because of an older `node_modules`; a fresh clone with `--frozen-lockfile` reproduced the failure.
+- **Decision:** `tsconfig.json` checks only `src/` (browser code, `vite/client` types).
+  `tsconfig.node.json` checks `vite.config.ts` and `eslint.config.js` with Node types.
+  `pnpm typecheck` runs both.
+- **Dependency:** `@types/node` ^24 (MIT, dev only). It provides Node types for the config files, and the browser code does not see them.
+
+## ADR-013: Recycle pre-created overlays rather than retaining rendered pages
+
+- **Status:** accepted (2026-10-30), macOS measurements only.
+- **Experiment:** twenty capture/cancel cycles per strategy, on the same three-display setup as the capture spike.
+  Raw RGBA IPC is unchanged. Timings end when Rust has called `show` on all windows, not at a
+  measured physical screen refresh, and memory was sampled externally, so figures are indicative.
+- **Decision:** pre-create hidden 1×1 overlay windows on macOS, destroy them after capture, then
+  create fresh hidden replacements on a worker thread. Missing windows still have an on-demand path.
+  Do not pre-create anything on Windows until there is a capture backend to use it.
+- **Trade-off:** on-demand median 316 ms, retained pre-created pages 186 ms, recycled pre-created
+  pages 236 ms. Fully reused pages retained about 281 MB total after two minutes idle, compared with
+  75 MB for on-demand and 97 MB for recycling in the comparison runs. Memory varies between runs.
+  The final recycled run measured 239 ms median; the 150 ms target is **not met**.
+- **Memory investigation:** freed frame-sized allocations were absent from a `heap` inspection,
+  but macOS malloc sometimes retained ~77 MB of dirty large-allocation pages. A trial of
+  `malloc_zone_pressure_relief` released zero bytes and was reverted. No allocator workaround ships.
+- **Cleanup:** remove the losing strategies, comparison flags, spike transfer encoders, benchmark UI,
+  `spike.rs`, and the experimental custom protocol/CSP entries. Retain a Rust-only `--stress=N`
+  diagnostic that uses the same capture and cancellation functions as the normal workflow.
+
+## ADR-014: Global shortcut and focus restoration
+
+- **Status:** accepted (2026-10-30).
+- **Dependency:** `tauri-plugin-global-shortcut` 2 (MIT/Apache-2.0), the official cross-platform
+  shortcut plugin; avoids separate native registration implementations. `png` is no longer a direct
+  dependency because the overlay only needs raw pixels (reconsidered for export in ADR-018).
+- **Decision:** register `CommandOrControl+Shift+2` at startup, respond only on press, and ignore
+  duplicate triggers during an active capture. Keep the accelerator in a Rust constant and accept
+  it as a registration argument, so future customization does not need a settings UI now.
+  Show registration failure in the main window while preserving tray Capture.
+- **Conflict limitation:** in a local experiment, macOS accepted Snipvero's registration even while
+  a separate process held the same shortcut. Therefore registration success does not prove that
+  the shortcut is exclusive. OS-reported errors are handled; reliable cross-app conflict detection
+  is not claimed. The holder experiment is not a Windows runtime test.
+- **Focus:** `NSWorkspace.frontmostApplication` supplies the prior macOS process ID before capture;
+  after closing overlays, activate that `NSRunningApplication`, unless it was Snipvero itself.
+  No Accessibility permission is required. Windows focus restoration remains unimplemented until
+  its native capture workflow is available; compilation is covered by Windows CI only.
+
+## ADR-015: Permission guidance without a general URL opener
+
+- **Status:** accepted (2026-10-30).
+- **Decision:** query capture support, shortcut status and Screen Recording permission from Rust.
+  On missing permission, keep the existing preflight/request path and show numbered instructions,
+  a fixed System Settings link (`Privacy_ScreenCapture` via `NSWorkspace.openURL`) and a restart button.
+  Refresh status when the main window regains focus. No opener/shell dependency or arbitrary URL command.
+- **Verification:** existing permission survived signed rebuilds. The user declined permission
+  revocation/regrant testing, so opening the new settings link, restart behaviour and permission
+  regrant without restarting remain **unverified**, not prerequisites assumed to work.
+
+## ADR-016: Region selection in the overlay page, in frame pixels
+
+- **Status:** accepted (2026-10-30). Verified on macOS only.
+- **Decision:** selection interaction runs entirely in each overlay's webview, as a pure reducer
+  (`src/overlay/selection.ts`) driven by pointer events. No IPC while the mouse moves. Rust hears
+  about a selection twice per gesture at most: when a new selection is first dragged (to take
+  ownership) and when a region is finalized (`overlay_select`).
+- **Coordinates:** the model works in the captured frame's integer physical pixels, frame-local.
+  `src/overlay/coords.ts` is the only place that converts pointer CSS pixels to frame pixels and back,
+  using the per-axis frame/window size ratio of that display. The exported region therefore needs
+  no further conversion for cropping (export), and no global scale factor is assumed. Rust validates it
+  (`PixelRect::fits`) and can map it to desktop points (`PixelRect::to_logical`).
+- **One selection per session:** `Session.selection` records which overlay owns it. A new owner
+  causes an `overlay-selection-cleared` event to the previous one. Cross-monitor selection stays out
+  of scope (ADR-003).
+- **Behaviour choices:** a press-release within 3 CSS px is a click and creates nothing (a click
+  outside a selection keeps it); edges flip when dragged past each other; a resize to zero size restores
+  the previous region; moving shifts but never shrinks the selection at monitor edges.
+- **Rendering:** DOM elements above the untouched frame canvas (border via `outline`, dimming via a large
+  `box-shadow`), no canvas redraw per move. Drawn elements ignore pointer events; hit testing is in the model.
+- **Native:** overlay windows set `accept_first_mouse(true)` (Tauri builder option, no new dependency),
+  so the first press on another display starts a selection instead of only focusing it.
+- **Dependencies:** none added.
+
+## ADR-017: Annotations in the overlay page, pinned to the screenshot, drawn with Konva
+
+- **Status:** accepted (2026-10-30). Verified on macOS only.
+- **Dependencies:** `konva` 10 and `react-konva` 19 (both MIT; react-konva brings `react-reconciler`,
+  `scheduler`, `its-fine`, all MIT), as planned in ADR-001: a maintained canvas scene graph for
+  sharp HiDPI drawing now and rasterization at physical resolution for export. Only `konva/lib/Core` and
+  the Line, Rect and Text shapes are imported, and the annotation layer is a lazily loaded chunk
+  (≈264 kB, 82 kB gzip). The main bundle grew from 249 kB to 266 kB.
+- **Decision:** annotation state is three pure reducers (`selection.ts`, `annotate.ts`, `editor.ts`)
+  with plain serializable annotation objects; React and Konva only render. No IPC while drawing;
+  Rust is unchanged and still only records the region.
+- **Coordinates:** frame physical pixels relative to the region's top-left corner. Annotations are
+  pinned to the frozen screenshot (user decision): moving, resizing or replacing the region rebases
+  them (whole history) so they stay on the same pixels; anything outside the region is clipped,
+  not deleted. Rejected: annotations travelling with the region (they would no longer match the
+  pixels they point at).
+- **Interaction choices (user decisions):** a drag outside the region with a drawing tool still
+  starts a new selection and keeps the annotations; the first Escape while editing text finishes the
+  edit, the next one cancels the capture. A Select/move tool is the default, so the region behaviour (drag
+  inside moves the region) is unchanged until a drawing tool is chosen; clicking the active tool
+  again returns to it. The selected annotation's handles win over the region's handles.
+- **Text editing** uses a native `<textarea>` overlay rather than Konva text editing, for IME,
+  dead keys and Unicode. Arrow heads are computed geometry, not Konva's `Arrow`.
+
+## ADR-018: Export composed in Rust from the held frame, annotations rasterized by the page
+
+- **Status:** accepted (2026-10-30). Verified on macOS only; Windows compiles and passes CI only.
+- **Pipeline (one for clipboard and PNG):** the overlay page rasterizes only the annotations, with
+  the same Konva shape configurations as the preview (`shapes.ts`), into a straight-alpha RGBA layer
+  exactly the region's pixel size (a detached Konva group, `toCanvas` at pixel ratio 1: no stage, so
+  no device-pixel-ratio or hit buffers). It is sent as a raw IPC body, with session and region in
+  `x-snipvero-*` headers. Rust validates the session, the region against the frame (`PixelRect::fits`)
+  and the layer length (exactly width × height × 4, or empty without annotations), crops the frame
+  it still holds, blends the layer source-over and forces alpha to 255 (the capture is opaque).
+  - The screenshot never travels back over IPC, nothing is base64, and no intermediate file exists;
+    the region is already in frame pixels (ADR-016), so Retina, mixed and fractional scales need no
+    conversion. The payload is bounded by the frame size and skipped entirely without annotations.
+  - **Rejected:** composing the whole image in the page (the frame would have to be redrawn through
+    a canvas and sent back, 24 MB for a Retina display, and canvas colour handling could alter
+    screenshot pixels); rendering annotations in Rust (needs a font rasterizer and font files, and
+    text would not match the webview's preview).
+- **One export at a time:** `Session.exporting` rejects a second request (Rust), and the page's
+  exporter ignores repeats while one runs; held keys do not repeat. The export takes the selection
+  (the page may export before its last `overlay_select` arrived). Success closes the overlays
+  through the same `overlay::close` as Escape, which ends the session and restores focus.
+- **Save dialog:** `rfd` 0.17 (MIT), without default features (they only select Linux backends).
+  It is the library Tauri's dialog plugin wraps; using it directly avoids that plugin's
+  `tauri-plugin-fs` dependency and frontend permissions, since only Rust opens the dialog. The
+  dialog is owned by the requesting overlay (a sheet on that display on macOS). **Finding:** AppKit
+  runs the panel at the modal-panel level, so it first appeared behind the overlays
+  (`NSScreenSaverWindowLevel`), and Escape then left a black screen until Quit. Fix: while the
+  dialog is open, the overlays step down to `NSNormalWindowLevel` and return afterwards.
+- **Clipboard:** macOS writes one `NSPasteboardItem` with PNG and TIFF data directly through
+  objc2-app-kit (already a dependency; features added), so no crate is added there. Windows uses
+  `arboard` 3 (MIT/Apache-2.0; CF_DIBV5 plus a registered "PNG" format), a target-only dependency,
+  because a hand-written Win32 clipboard could not be tested without a Windows machine. arboard is
+  not used on macOS, where its image support would also pull in the `image` crate with TIFF decoding.
+- **PNG:** `png` 0.18 (MIT/Apache-2.0) becomes a direct dependency again; it was already in Tauri's
+  tree (ADR-007, ADR-014). 8-bit RGBA, `Fast` compression for the clipboard, `Balanced` for files.
+- **File name:** the page suggests `Snipvero-YYYY-MM-DD-HHMMSS.png` in local time (Rust's standard
+  library has no time zones, and a time crate is not worth it); Rust accepts only a plain ASCII
+  `*.png` name, never a path.
+
+## ADR-019: Session-scoped capture lifecycle with recovery paths
+
+- **Status:** accepted (2026-10-31). Verified on macOS only; Windows compiles and passes CI only.
+- **Context (stabilization review and measurements):** every end of a capture called one unconditional
+  `overlay::close`, so a late request (a failing page of an ended capture, an export finishing
+  after Escape) could close a newer capture. A capture whose overlays never reported ready, or
+  that found no display, stayed busy and invisible until Snipvero was restarted. Escape on another
+  display could destroy the overlay that carries the save panel's sheet. AppKit objects of each
+  clipboard copy stayed alive on the long-lived async runtime threads (main process +8 MB per
+  Retina copy in 20 measured cycles, released only when the thread exited).
+- **Decision:**
+  - `overlay::close(app, session)` ends only the named capture and is a no-op otherwise;
+    `overlay_cancel` takes the page's session and returns whether it closed. Readiness is
+    recorded per overlay, not counted.
+  - A watchdog ends a capture whose overlays are not all shown after 8 s, with an error in the
+    main window. Capturing no display is an error, not an empty session.
+  - Escape is refused while an export runs (`Session.exporting`); the save panel handles its own
+    Escape.
+  - On `NSApplicationDidChangeScreenParametersNotification` a capture ends, but only if the
+    display bounds really differ from the captured ones: AppKit posted the notification once
+    during stress runs without any display change. Not during an export.
+  - Request validation completes before the export lock is taken. PNG files are written to a
+    hidden sibling and renamed over the target, so a failed write leaves neither a truncated file
+    nor a destroyed original. The macOS clipboard code runs in its own autorelease pool.
+- **Dependencies:** none added; objc2-foundation features `block2`, `NSNotification`,
+  `NSOperation` and objc2-app-kit `NSApplication` (same crates).
+- **Developer harness:** `--stress-export=N` runs the Rust export path (lock, composition,
+  PNG + TIFF) onto a private, released `NSPasteboard`, so the user's clipboard is not touched.
+  It does not include the page's annotation rasterization.
+
+## ADR-020: macOS beta packaging, version scheme and icons
+
+- **Status:** accepted (2026-10-31). Verified on macOS only. The `CFBundleShortVersionString`
+  part of **Version** is superseded by ADR-022.
+- **Scope (user decision):** macOS is the only platform of the beta; Windows stays in CI (NSIS
+  smoke bundle) and is presented as planned. Public text describes Snipvero on its own terms,
+  without comparisons with other tools.
+- **Version:** `0.1.0-beta.1` in `package.json`, `Cargo.toml` and `tauri.conf.json`, enforced
+  equal by a Rust test. `CFBundleShortVersionString` carries the SemVer string; `CFBundleVersion`
+  is a separate integer build number (`bundle.macOS.bundleVersion`), because Apple expects
+  integers there and a pre-release suffix would otherwise end up in it.
+- **Icons:** SVG sources in `src-tauri/icons/source/`, rasterized by `tauri icon` (no new tool).
+  The app icon follows the macOS grid (824 px body in 1024 px) instead of the earlier full-bleed
+  placeholder. The macOS menu bar uses a black-and-alpha **template image** with
+  `icon_as_template(true)`, so macOS adapts it to light, dark and highlighted menu bars (blocker 1
+  of the initial scaffold). Windows keeps the coloured app icon.
+- **Decoding:** the template PNG is decoded with the `png` crate, already a direct dependency
+  (ADR-018), instead of Tauri's `image-png` feature, which would add the `image` crate.
+- **Packaging:** `app` and `dmg` bundles; CI's macOS smoke bundle now also builds the DMG.
+  `signingIdentity` stays ad hoc (`"-"`); a Developer ID identity and notarization credentials are
+  passed only through the environment (as in ADR-011). No entitlements: the app is not sandboxed and
+  needs no JIT or other hardened-runtime exceptions. Requirements are in `docs/RELEASE.md`.
+- **Dependencies:** none added.
+
+## ADR-021: Third-party license policy and bundled notices
+
+- **Status:** accepted (2026-10-31). Generated and checked on macOS; the file also covers the
+  Windows crate set.
+- **Context:** most licenses of the 278 Rust crates and 10 npm packages in the shipped code require
+  their copyright and license text to accompany binary copies (RELEASE.md). Nothing enforced
+  the AGENTS.md license policy either.
+- **Decision:** `scripts/third-party-notices.mjs` generates `THIRD_PARTY_NOTICES.txt`, committed at
+  the repository root and copied into `Snipvero.app/Contents/Resources/` together with `LICENSE`
+  (`bundle.resources`). CI's macOS job runs `pnpm notices:check`, which fails on a stale file, a
+  missing license text or a license outside the policy.
+  - **Scope:** normal (not build or dev) dependencies of `snipvero` for `aarch64-apple-darwin`,
+    `x86_64-apple-darwin` and `x86_64-pc-windows-msvc`, from `cargo metadata`; npm packages whose
+    modules are in a production Vite build, including Vite's and Rolldown's injected helpers; the
+    Rust standard library. Not included: build tools, type packages, macOS system frameworks
+    (WebKit, AppKit, ScreenCaptureKit), which are not shipped.
+  - **Policy:** an SPDX alternative must consist only of MIT, MIT-0, Apache-2.0 (also with
+    LLVM-exception), BSD-2-Clause, BSD-3-Clause, ISC, Zlib, 0BSD, BSL-1.0, CC0-1.0, Unlicense,
+    Unicode-3.0, Unicode-DFS-2016 or MPL-2.0 (unmodified use). Beyond the AGENTS.md list, only
+    Unicode-3.0 (ICU4X crates, `unicode-ident`) has no alternative in the current tree; BSL-1.0
+    is Windows-only (`clipboard-win`), and the others appear only as alternatives.
+  - **Choice of license:** for `OR` expressions the notices name the alternative used, preferring
+    the shortest obligations (MIT first) among those whose text the package ships, and include
+    only that text plus license-neutral files (NOTICE, COPYRIGHT). A file is attributed by its name
+    or, failing that, its text; when that is unclear, every file is kept.
+  - **Packages without license files** (objc2 family, `alloc-stdlib`, `selectors`, the Windows
+    `webview2-com` and `clipboard-win` crates) use texts from their source repositories in
+    `scripts/licenses/`, with sources recorded there.
+  - **MPL-2.0** (`selectors`, `cssparser`, `cssparser-macros`, `dtoa-short`, `option-ext`, via
+    Tauri) is used unmodified; the notices name each component's source repository.
+- **Rejected:** `cargo-about`/`cargo-deny` and an npm license tool: a new tool per contributor and
+  in CI, while Cargo's metadata and Vite's module graph already give the exact sets. `pnpm licenses`
+  lists type-only and other packages that are not bundled.
+- **Noted:** the objc2 project remarks that its bindings derive from Apple SDK headers and that the
+  Xcode license's view of this is unclear; every macOS app built with Xcode is in the same
+  position, so it is recorded, not treated as a blocker.
+- **Dependencies:** none added.
+
+## ADR-022: Apple bundle versions and Apple silicon-only beta
+
+- **Status:** accepted (2026-10-31). Verified on macOS only. Supersedes the
+  `CFBundleShortVersionString` part of ADR-020.
+- **Context:** Apple defines `CFBundleShortVersionString` and `CFBundleVersion` as one to three
+  period-separated integers. The first beta packaging built `CFBundleShortVersionString` `0.1.0-beta.1`, outside that
+  format. Tauri copies the package version into that key and has no separate setting for it.
+- **Decision:**
+  - The package version stays SemVer with the beta identifier (`0.1.0-beta.1`): manifests, Git
+    tag `v0.1.0-beta.1`, DMG and installer names, GitHub Release.
+  - `src-tauri/Info.plist` sets `CFBundleShortVersionString` to the version without its
+    pre-release suffix (`0.1.0`). Tauri's bundler merges this file over its generated keys
+    (checked in the tauri-cli 2.12.4 source and in the built bundle). A Rust test keeps it equal
+    to the package version's core and checks both values' format.
+  - `CFBundleVersion` remains the integer build number `bundle.macOS.bundleVersion`, increased for
+    every published build, so betas and the final release of one version stay ordered.
+  - **Apple silicon only:** the beta ships one `aarch64` DMG. Intel was never built or tested, and
+    the README claimed an `x64` download that did not exist. A universal build is the documented
+    path once an Intel Mac is available for testing.
+- **Verification:** `scripts/verify-macos-bundle.mjs` checks the built app and the app inside the
+  DMG (plist values, file list, architectures, `minos`, system-only libraries, signature, hardened
+  runtime, no entitlements, DMG contents), and with `--distribution` the Developer ID signature,
+  timestamp, stapled tickets and Gatekeeper. CI runs it on the debug bundle.
+- **Dependencies:** none added.
+
+## ADR-023: Progress log is local, not part of the repository
+
+- **Status:** accepted (2026-10-31), user decision, in preparation for a public repository.
+- **Context:** `docs/PROGRESS.md` was a running session log for hand-offs between contributors and
+  coding agents: work notes, local measurements, machine details and QA status. It is useful
+  while working but is not documentation for users or outside contributors.
+- **Decision:** `docs/PROGRESS.md` is ignored by Git and kept only in local checkouts. Lasting
+  content goes into tracked documents: decisions and their measurements here, requirements in
+  `REQUIREMENTS.md`, build and release steps in `README.md`, `CONTRIBUTING.md` and `RELEASE.md`,
+  working rules in `AGENTS.md`. Nothing in the build, tests or CI reads the file.
+- **Consequence:** the public history starts from a single snapshot commit; earlier development
+  history is not part of the public repository.
+
+## ADR-024: Main window, About window and fixed external links
+
+- **Status:** accepted (2026-10-31). Built and unit-tested on macOS (Apple silicon); Windows only
+  through CI. Both windows were checked in the running release app in the dark appearance
+  (window captures), and in a browser with mocked IPC in light and dark; no manual QA (user
+  decision).
+- **Context:** the main window was a page of text with much empty space; there was no About
+  information in the app and no way to start a capture from the window.
+- **Decision:**
+  - **Main window:** header (icon, name, subtitle, version), a **Capture Region** button with the
+    registered shortcut, three feature cards, status rows (menu bar, Screen Recording permission,
+    global shortcut) and a footer with the version, About and GitHub. The button calls the
+    `start_capture` command, which runs `overlay::start` on the main thread, the same path as the
+    tray and the shortcut. Status shows "Checking…" until Rust answers; nothing is assumed. The
+    main and About windows size their height to their content (`useFitWindow`,
+    `core:window:allow-set-size` for those two windows), so the permission guidance appearing or
+    going away neither scrolls nor leaves empty space. A single `setSize` is not enough: on macOS
+    27 the requested height includes the title bar (About: 412 pt requested, 413 pt window frame,
+    the footer of the main window cut off by about 28 pt in the first build), and concurrent
+    requests could land out of order. `fit.ts` therefore runs one request at a time, asks first for
+    the content height, corrects the last request by what is still missing after each native
+    resize, and gives up after four corrections per content height.
+  - **About window:** a separate small window (label `about`) in the style of a Mac About panel,
+    created on demand and destroyed on close, because it is rarely open and a hidden web view would
+    keep its memory. One function, `about::show`, serves the tray and the main window and runs on
+    the main thread, so two requests cannot create two windows; an existing one is focused. It
+    shows the developer name given by the maintainer but no email address or other contact
+    details; contributors are credited through GitHub's contributor page, not a list in the app.
+  - **Metadata from Rust:** the `app_info` command returns name and version from
+    `tauri.conf.json` (`PackageInfo`), the project page from `Cargo.toml` (`repository`, read with
+    `CARGO_PKG_REPOSITORY`), its contributors page, and the copyright `© 2026 Snipvero
+Contributors`. Tauri does not embed `bundle.homepage` or `bundle.copyright` in the app binary
+    (absent from the release build), so the first version of this window, which read them at
+    runtime, showed no links; tests now keep `tauri.conf.json` equal to the Rust values. The
+    version is never written in the frontend.
+  - **Fixed links, no opener plugin (extends ADR-015):** `open_link` takes an enum (`repository`,
+    `contributors`, `license`). Rust derives the web addresses from the project page, accepts only
+    `https`, and opens them with `NSWorkspace`; `license` opens the bundled `LICENSE.txt`. Links in
+    the page keep their real `href` for display but never navigate the web view. The app itself
+    still makes no network requests; the browser opens the page after an explicit click. Not
+    implemented on Windows yet (returns an error).
+  - **Theme:** colour tokens on `:root` with a `prefers-color-scheme: dark` set; the main and
+    About windows use only tokens. Indigo accent from the app icon (`#4f46e5` light, `#6366f1`
+    dark).
+- **Dependencies:** `happy-dom` (MIT), dev only: a DOM for Vitest so the main and About windows
+  are tested by clicking them (React's `act`, no testing library). Its runtime dependencies are MIT
+  or BSD-2-Clause; it is not part of the app or `THIRD_PARTY_NOTICES.txt`.
+- **Verification:** Vitest (main window: metadata, Capture Region, permission states, shortcut,
+  About, GitHub link; About: content, no email, links, Escape; window routing; theme tokens),
+  Rust tests (tray menu order and About action, close policy, capabilities for every window, link
+  derivation, the project page and copyright equal to `tauri.conf.json`). Release `.app` and DMG
+  built, `pnpm verify:macos` passed, and the release binary contains the project page. Window
+  fitting (`fit.test.ts`) is tested with and without a title bar in the requested size. Running
+  app (macOS 27, dark): main window 520 × 504 pt frame with the footer and GitHub link visible and
+  no scroll bar; About window 360 × 420 pt with all rows visible. Not verified: clicking the tray
+  **About Snipvero** item and the links in the running app, and the light appearance there.
