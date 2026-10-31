@@ -503,3 +503,22 @@ Contributors`. Tauri does not embed `bundle.homepage` or `bundle.copyright` in t
   permission granted again once (RELEASE.md §6). Once a Developer ID exists, ADR-020's path
   (Developer ID, notarization, `--distribution`) applies again and this exception ends.
 - **Dependencies:** none added.
+
+## ADR-026: Exclusive temporary file for saves; minimatch override
+
+- **Status:** accepted (2026-10-31). Verified on macOS (Apple silicon) only; the Windows path is
+  compiled in CI but its behaviour was not tried.
+- **Context:** A security review found that the save sibling `.<name>.snipvero-partial` was
+  predictable and opened with `std::fs::write`: a symlink planted under that name by anyone able
+  to write to the folder redirected the PNG over another file. Replacing a mode-0600 file also
+  left a 0644 file (umask default), widening access to the screenshot. `pnpm audit` reported
+  GHSA-g3hv-75wg-m249 (ReDoS) in minimatch 10.2.6, pulled in by ESLint and typescript-eslint
+  (dev only); the fix exists only in 11.0.1+.
+- **Decision:** `write_replacing` creates the sibling with `create_new` (`O_EXCL`, which fails on
+  an existing entry including a symlink) under a per-process, per-call name, retrying on a taken
+  name. On Unix, a replaced regular file's permission bits are given to the sibling at creation;
+  new files keep the umask default. `pnpm-workspace.yaml` overrides `minimatch@10` to `^11.0.3`
+  until ESLint requires 11; lint and tests pass with it.
+- **Consequences:** Regression tests cover the planted symlink, a 0600 replacement and a taken
+  name. Owner, ACLs and extended attributes of a replaced file are still not carried over.
+- **Dependencies:** none added (minimatch only moves a major version in dev tooling).

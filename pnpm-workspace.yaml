@@ -1,0 +1,4 @@
+# GHSA-g3hv-75wg-m249 (ReDoS) is fixed only in minimatch 11.0.1+, while ESLint and
+# typescript-eslint still ask for ^10. Dev tooling only; drop once they require 11.
+overrides:
+  minimatch@10: ^11.0.3

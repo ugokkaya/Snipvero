@@ -158,19 +158,72 @@ pub fn valid_file_name(name: &str) -> bool {
 /// Writes `bytes` to `path` through a hidden sibling file renamed over it, so a failed write
 /// (a full disk, a removed volume) never leaves a truncated PNG or destroys the file the user
 /// chose to replace. The sibling is removed again on failure.
+///
+/// The sibling is only ever created, never opened if it exists: anyone who can write to the
+/// folder could otherwise plant a symlink under its name and have the image written through it
+/// over another file. A replaced file keeps its permission bits, so a private file stays private.
 pub fn write_replacing(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+
     let name = path
         .file_name()
         .ok_or_else(|| std::io::Error::other("no file name"))?;
-    let mut partial = OsString::from(".");
-    partial.push(name);
-    partial.push(".snipvero-partial");
-    let partial = path.with_file_name(partial);
-    let result = std::fs::write(&partial, bytes).and_then(|()| std::fs::rename(&partial, path));
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    if let Ok(existing) = std::fs::symlink_metadata(path)
+        && existing.is_file()
+    {
+        use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+        options.mode(existing.mode() & 0o777);
+    }
+    let (partial, mut file) = create_partial(path, name, &options)?;
+    let result = file
+        .write_all(bytes)
+        .and_then(|()| file.sync_all())
+        .and_then(|()| {
+            drop(file);
+            std::fs::rename(&partial, path)
+        });
     if result.is_err() {
         let _ = std::fs::remove_file(&partial);
     }
     result
+}
+
+/// Creates a hidden sibling of `path` with a name no one else holds, retrying on a name taken
+/// by a leftover or a planted entry instead of reusing it.
+fn create_partial(
+    path: &Path,
+    name: &std::ffi::OsStr,
+    options: &std::fs::OpenOptions,
+) -> std::io::Result<(PathBuf, std::fs::File)> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    const ATTEMPTS: u32 = 16;
+    for _ in 0..ATTEMPTS {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |since| since.subsec_nanos());
+        let mut partial = OsString::from(".");
+        partial.push(name);
+        partial.push(format!(
+            ".{}-{}-{nanos}.snipvero-partial",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        let partial = path.with_file_name(partial);
+        match options.open(&partial) {
+            Ok(file) => return Ok((partial, file)),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Err(std::io::Error::new(
+        std::io::ErrorKind::AlreadyExists,
+        "no free name for the temporary file",
+    ))
 }
 
 /// Puts the image on the system clipboard as an image (not a path or encoded text).
@@ -643,6 +696,49 @@ mod tests {
         assert!(path.join("keep").exists());
         let entries: Vec<_> = std::fs::read_dir(&dir).unwrap().collect();
         assert_eq!(entries.len(), 1, "the partial file is removed");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_planted_symlink_does_not_redirect_the_write() {
+        let dir = scratch_dir("symlink");
+        let victim = dir.join("victim.txt");
+        std::fs::write(&victim, b"keep").unwrap();
+        // The temporary name this function used to derive from the file name alone.
+        std::os::unix::fs::symlink(&victim, dir.join(".Snipvero.png.snipvero-partial")).unwrap();
+        let path = dir.join("Snipvero.png");
+        write_replacing(&path, b"new").unwrap();
+        assert_eq!(std::fs::read(&victim).unwrap(), b"keep");
+        assert_eq!(std::fs::read(&path).unwrap(), b"new");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_replaced_file_keeps_its_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = scratch_dir("mode");
+        let path = dir.join("Snipvero.png");
+        std::fs::write(&path, b"old").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        write_replacing(&path, b"new").unwrap();
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_taken_temporary_name_is_skipped() {
+        let dir = scratch_dir("taken");
+        let path = dir.join("Snipvero.png");
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        let (first, _file) =
+            create_partial(&path, std::ffi::OsStr::new("Snipvero.png"), &options).unwrap();
+        let (second, _file) =
+            create_partial(&path, std::ffi::OsStr::new("Snipvero.png"), &options).unwrap();
+        assert_ne!(first, second);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
