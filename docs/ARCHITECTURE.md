@@ -214,8 +214,10 @@ Rust            ─▶ Session.begin_export (session, region fits, layer size, n
 - **Outcome:** success closes everything through `overlay::close`; a cancelled dialog returns
   `cancelled` and an error is shown in the overlay, which stays open with its annotations.
 - **Disk:** only the file the user chose is written, through a hidden sibling
-  (`.<name>.snipvero-partial`) renamed over it and removed on failure, so a failed write never
-  leaves a truncated PNG or destroys the file being replaced.
+  (`.<name>.<pid>-<n>-<nanos>.snipvero-partial`) renamed over it and removed on failure, so a
+  failed write never leaves a truncated PNG or destroys the file being replaced. The sibling is
+  created exclusively (never opened through an existing entry or symlink) and, on Unix, with the
+  replaced file's permission bits (ADR-026).
 - **Clipboard memory:** the macOS clipboard code runs in its own autorelease pool; exports run on
   long-lived async runtime threads, which have none.
 
