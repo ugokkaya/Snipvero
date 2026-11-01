@@ -1,11 +1,11 @@
 {
-  "version": "0.1.0-beta.3",
-  "notes": "This beta adds in-app updates: Snipvero can check for a newer version from its About window and install it after you agree, verifying the update's signature first. It only connects to the internet when you click Check for Updates.\n\nFull release notes: https://github.com/ugokkaya/Snipvero/releases/tag/v0.1.0-beta.3",
-  "pub_date": "2026-11-01T11:31:08Z",
+  "version": "0.1.0-beta.4",
+  "notes": "This beta lets you choose and save your capture shortcut from the main window. It also adds links to the official Snipvero website and support email, while keeping screenshots local and update checks strictly user-initiated.\n\nFull release notes: https://github.com/ugokkaya/Snipvero/releases/tag/v0.1.0-beta.4",
+  "pub_date": "2026-11-01T19:15:16Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSZjFuUnFqbXRHOUU1OVh6akh0ZG5lSUFNUk9FUTBmajYwWlgrTm1ncFp2Y3Q0VU14LzZpTndhK2Jzd1RTTUF6M2c1cWZCbzl2clBMa3JRVTJCaW9XWkJMYVZqS1VzdWdjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNTMyNjY4CWZpbGU6U25pcHZlcm9fMC4xLjAtYmV0YS4zX2FhcmNoNjQuYXBwLnRhci5negl2ZXJzaW9uOjAuMS4wLWJldGEuMwpETENhZk9aS2NuemRuc0Z2UG5kQ2pQOVR1V2VNeVJQYXJRdG1sTzFZZW9iVmxWRkxxeDJSenR5Vm8yM2l3RXNyRFc2STEvemdxZWxyRm5xaWwwVnRDZz09Cg==",
-      "url": "https://github.com/ugokkaya/Snipvero/releases/download/v0.1.0-beta.3/Snipvero_0.1.0-beta.3_aarch64.app.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSZjFuUnFqbXRHOUhjTzlvZWlvOW02RVY3S0Y4SUluYmluMkVUNXlzZEFPMjIzdEY4VWExV1hnMVgxb0Jzc0VmSzd6cmpvQm5PdmxqYmNzaUF6bUd0TCtMYTB2RGN1bndBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNTYwNTE2CWZpbGU6U25pcHZlcm9fMC4xLjAtYmV0YS40X2FhcmNoNjQuYXBwLnRhci5negl2ZXJzaW9uOjAuMS4wLWJldGEuNApQZkdwT0RKR3ZNVWlrL1gxQmN5NTVXbzdSUGp3RkJNVVBsK0p4b1NIdUdNRWlhbHBJV0dGMGxidmFWZitHZm1ZS3BZbURvWitzbko1eW4zSTVhOTJCZz09Cg==",
+      "url": "https://github.com/ugokkaya/Snipvero/releases/download/v0.1.0-beta.4/Snipvero_0.1.0-beta.4_aarch64.app.tar.gz"
     }
   }
 }
