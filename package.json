@@ -1,7 +1,7 @@
 {
   "name": "snipvero",
   "private": true,
-  "version": "0.1.0-beta.3",
+  "version": "0.1.0-beta.4",
   "description": "Open-source screenshot and annotation tool for macOS.",
   "license": "MIT",
   "type": "module",

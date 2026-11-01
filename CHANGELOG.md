@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.0-beta.4 — 2026-11-01
+
 ### Added
 
 - Links to **snipvero.app** in the main window footer and About window.
