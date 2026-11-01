@@ -685,3 +685,42 @@ privileges`), and Snipvero never sees a password. After a successful install the
 - **Verification:** a manifest-policy test checks the v6 dependency and absence of elevation or
   compatibility changes; the existing real-plugin MockRuntime tests are the Windows loader
   regression test. Windows packaging remains a CI smoke test, not a Windows runtime-support claim.
+
+## ADR-030: Customizable capture shortcut and a local settings file
+
+- **Status:** implemented (2026-11-01). Unit tests and the maintainer's manual QA of the local
+  signed build passed on macOS (Apple silicon): change, rejection, cancel, reset and restart.
+  Command+Print Screen never reached the recorder: the system (or keyboard software mapping
+  that key to a screenshot combination) takes it first, which no app can prevent. Windows:
+  compile, lint and unit tests in CI only.
+- **Context:** the capture shortcut was a fixed constant (ADR-014), and the README told users whose
+  `Cmd+Shift+2` is taken by another app to use the menu bar instead. ADR-014 already passed the
+  accelerator to `register`, so changing it needs a store and a recorder, not a new registration path.
+- **Decision:** the main window's **Global shortcut** row gets **Change…** and, for a custom
+  shortcut, **Reset to** the default. No separate settings window yet (ADR-003: no abstraction
+  without a second real use). Only the global capture shortcut is customizable; the overlay's keys
+  stay the platform's standard ones.
+- **Recording:** the page records the physical key (`KeyboardEvent.code`), not the character, so a
+  Turkish or other non-US layout and Option-modified characters record the key the OS registers.
+  The primary modifier is written `CommandOrControl` like the default. While recording, Rust
+  releases the current shortcut (`shortcut_suspend`), so pressing it reaches the page instead of
+  starting a capture; Escape, Cancel, a saved shortcut, or the main window losing focus (checked in
+  Rust too, `WindowEvent::Focused(false)`) registers it again.
+- **Validation in Rust only** (`shortcut::validate`), so the page cannot register what Rust would
+  refuse: Command/Control/Option (Alt) is required, plus a second modifier except on F1–F24,
+  because one-modifier combinations are apps' own commands and Option+key types characters.
+  A short per-OS list of system combinations (macOS screenshot keys, log out, lock screen; Windows
+  secure attention keys) and redo (`CommandOrControl+Shift+Z`) is refused. Rejections are named
+  values (`shortcut::Rejection`) worded per platform by the page.
+- **Change is all-or-nothing:** release the current shortcut, register the new one, then save; if
+  registration or saving fails, the new one is released and the previous one registered again.
+  ADR-014's limitation stands: macOS may accept a combination another app also holds, so a
+  successful change does not prove the shortcut is exclusive.
+- **Storage:** `settings.json` in Tauri's `app_config_dir`
+  (`~/Library/Application Support/com.snipvero.app/` on macOS), written through a temporary file
+  and a rename. No new dependency: `serde_json` is already used. A missing, unreadable or invalid
+  file, or a saved shortcut that no longer passes validation, means the default; startup never
+  fails on it. Unknown fields are ignored on read. The file holds only the accelerator; no
+  screenshot data, paths or identifiers (NFR-2).
+- **Commands:** `shortcut_set(accelerator | null)` and `shortcut_suspend(suspended)`, accepted from
+  the main window only.

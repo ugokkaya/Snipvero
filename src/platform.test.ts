@@ -35,4 +35,11 @@ describe("shortcutLabel", () => {
     expect(shortcutLabel(DEFAULT, "windows")).toBe("Ctrl+Shift+2");
     expect(shortcutLabel("Super+Shift+a", "windows")).toBe("Win+Shift+A");
   });
+
+  it("names recorded keys by what they show, not their code", () => {
+    expect(shortcutLabel("CommandOrControl+Alt+ArrowUp", "macos")).toBe("⌘⌥↑");
+    expect(shortcutLabel("Control+Shift+Space", "macos")).toBe("⌃⇧Space");
+    expect(shortcutLabel("CommandOrControl+Alt+Minus", "windows")).toBe("Ctrl+Alt+-");
+    expect(shortcutLabel("Alt+F5", "windows")).toBe("Alt+F5");
+  });
 });

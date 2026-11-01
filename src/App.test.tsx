@@ -18,6 +18,9 @@ const ipc = vi.hoisted(() => ({
   cancelUpdate: vi.fn(),
   updateFailure: vi.fn(),
   onUpdateCheckRequested: vi.fn(() => Promise.resolve(() => undefined)),
+  setShortcut: vi.fn(),
+  suspendShortcut: vi.fn(),
+  shortcutRejection: (error: unknown) => error,
 }));
 vi.mock("./ipc", () => ipc);
 vi.mock("@tauri-apps/api/window", () => ({
@@ -60,6 +63,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   ipc.appInfo.mockResolvedValue(INFO);
   ipc.appStatus.mockResolvedValue(status());
+  ipc.suspendShortcut.mockResolvedValue(status().shortcut);
   ipc.onCaptureFailed.mockImplementation((handler: (message: string) => void) => {
     captureFailed = handler;
     return Promise.resolve(() => {});
@@ -155,7 +159,74 @@ describe("main window", () => {
     await render();
     expect(text()).toContain("Unavailable");
     expect(text()).toContain("could not be registered");
+    expect(text()).toContain("Choose another shortcut");
     expect(button("Capture Region").querySelector("kbd")).toBeNull();
+  });
+
+  describe("changing the shortcut", () => {
+    const key = (code: string, mods: KeyboardEventInit = {}) =>
+      act(async () => {
+        window.dispatchEvent(new KeyboardEvent("keydown", { code, cancelable: true, ...mods }));
+      });
+
+    it("releases the shortcut while recording and saves the new one", async () => {
+      const changed = { accelerator: "CommandOrControl+Alt+S", registered: true, error: null };
+      ipc.setShortcut.mockResolvedValue(changed);
+      await render();
+      await click(button("Change…"));
+      expect(ipc.suspendShortcut).toHaveBeenCalledWith(true);
+      expect(text()).toContain("Press the new shortcut");
+
+      await key("MetaLeft", { metaKey: true });
+      expect(ipc.setShortcut).not.toHaveBeenCalled();
+      await key("KeyS", { metaKey: true, altKey: true });
+      expect(ipc.setShortcut).toHaveBeenCalledWith("CommandOrControl+Alt+S");
+      expect(text()).not.toContain("Press the new shortcut");
+      expect(button("Capture Region").querySelector("kbd")?.textContent).toBe("⌘⌥S");
+      expect(text()).toContain("Reset to ⌘⇧2");
+    });
+
+    it("explains a rejected shortcut and keeps recording", async () => {
+      ipc.setShortcut.mockRejectedValue("modifiers");
+      await render();
+      await click(button("Change…"));
+      await key("KeyC", { metaKey: true });
+      expect(container.querySelector(".shortcut-error")?.textContent).toContain(
+        "two modifier keys",
+      );
+      expect(text()).toContain("Press the new shortcut");
+      expect(button("Capture Region").querySelector("kbd")?.textContent).toBe("⌘⇧2");
+    });
+
+    it("cancels with Escape and registers the shortcut again", async () => {
+      await render();
+      await click(button("Change…"));
+      await key("Escape");
+      expect(ipc.setShortcut).not.toHaveBeenCalled();
+      expect(ipc.suspendShortcut).toHaveBeenLastCalledWith(false);
+      expect(text()).not.toContain("Press the new shortcut");
+    });
+
+    it("stops recording when the window loses focus", async () => {
+      await render();
+      await click(button("Change…"));
+      await act(async () => window.dispatchEvent(new Event("blur")));
+      expect(ipc.suspendShortcut).toHaveBeenLastCalledWith(false);
+      expect(text()).not.toContain("Press the new shortcut");
+    });
+
+    it("resets a custom shortcut to the default", async () => {
+      ipc.appStatus.mockResolvedValue(
+        status({
+          shortcut: { accelerator: "CommandOrControl+Alt+S", registered: true, error: null },
+        }),
+      );
+      ipc.setShortcut.mockResolvedValue(status().shortcut);
+      await render();
+      await click(button("Reset to ⌘⇧2"));
+      expect(ipc.setShortcut).toHaveBeenCalledWith(null);
+      expect(text()).not.toContain("Reset to");
+    });
   });
 
   it("disables capture where the platform has no capture backend", async () => {

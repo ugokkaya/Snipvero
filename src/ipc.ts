@@ -106,6 +106,30 @@ export const overlaySave = (session: number, region: Rect, layer: Uint8Array, fi
 
 export const appStatus = () => invoke<AppStatus>("app_status");
 
+/** Why Rust did not take a new shortcut (`shortcut::Rejection`); the previous one stays. */
+export const SHORTCUT_REJECTIONS = [
+  "invalid",
+  "modifiers",
+  "reserved",
+  "unavailable",
+  "notSaved",
+  "notAllowed",
+] as const;
+export type ShortcutRejection = (typeof SHORTCUT_REJECTIONS)[number];
+
+/** A rejected shortcut command's reason; anything unexpected counts as `invalid`. */
+export function shortcutRejection(error: unknown): ShortcutRejection {
+  return SHORTCUT_REJECTIONS.find((rejection) => rejection === error) ?? "invalid";
+}
+
+/** Registers and saves a new capture shortcut; `null` restores the default. Main window only. */
+export const setShortcut = (accelerator: string | null) =>
+  invoke<ShortcutStatus>("shortcut_set", { accelerator });
+
+/** Releases the capture shortcut while a new one is recorded (`true`), or registers it again. */
+export const suspendShortcut = (suspended: boolean) =>
+  invoke<ShortcutStatus | null>("shortcut_suspend", { suspended });
+
 /** App metadata from Rust (`src-tauri/src/about.rs`); the page never repeats it. */
 export interface AppInfo {
   name: string;

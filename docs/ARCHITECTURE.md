@@ -19,6 +19,8 @@ index.html, src/              React frontend (every window loads index.html)
   App.tsx                     main window: Capture Region, features, permission/shortcut status, About, GitHub;
                               sizes the window to its content (useFitWindow.ts, fit.ts)
   About.tsx                   About window: name, version and copyright from Rust, license, project links
+  StatusRow.tsx               one row of the main window's status list
+  ShortcutRow.tsx, shortcut.ts  Global shortcut row: status, Change…/Reset; pure key → accelerator, messages (ADR-030)
   Updates.tsx, update.ts      Check for Updates: main window status row and About section; pure view reducer (ADR-028)
   ExternalLink.tsx            link opened by Rust (`open_link`); the web view never navigates
   useAppInfo.ts, icons.tsx    app metadata hook; line icons
@@ -52,7 +54,8 @@ src-tauri/
   src/tray.rs                 tray icon (macOS: template image) and menu (Capture, Open Snipvero, About Snipvero, Check for Updates…, Quit)
   src/about.rs                About window (created on demand), app metadata, fixed links (repository, contributors, license)
   src/update.rs               user-started update check, download, install and restart (tauri-plugin-updater, ADR-028)
-  src/shortcut.rs             global shortcut registration, status/error reporting
+  src/shortcut.rs             global shortcut registration, validation, change/suspend commands, status/error reporting
+  src/settings.rs             settings.json in the app config directory (capture shortcut), atomic writes (ADR-030)
   src/system/{mod,macos}.rs   previous-app focus restoration, fixed System Settings URL, open URL / file (NSWorkspace)
   src/events.rs               event names shared with the frontend
   src/geometry.rs             pure coordinate math (LogicalRect, PixelRect, physical size, Cocoa flip)
@@ -85,9 +88,11 @@ src-tauri/
   Implicit exit requests (`RunEvent::ExitRequested` with no exit code) are prevented.
 - **Single instance:** `tauri-plugin-single-instance` is registered first. A second launch exits
   and the running instance shows its main window.
-- **Global shortcut:** registered once at startup by `tauri-plugin-global-shortcut`:
-  `CommandOrControl+Shift+2`. Key-down triggers the same capture function as the tray.
-  OS-reported registration errors are displayed in the main window; tray capture stays usable.
+- **Global shortcut:** registered at startup by `tauri-plugin-global-shortcut`: the saved one from
+  `settings.json`, else `CommandOrControl+Shift+2`. Key-down triggers the same capture function as
+  the tray. OS-reported registration errors are displayed in the main window; tray capture stays
+  usable. The main window changes it (`shortcut_set`), releasing it while recording
+  (`shortcut_suspend`); a change that cannot be registered or saved keeps the previous one (ADR-030).
 - **Focus:** on macOS, record the frontmost app before showing overlays. On cancellation,
   reactivate that app rather than showing Snipvero's main window. Windows focus restoration
   is not implemented yet; Windows capture itself is still unsupported.

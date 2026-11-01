@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import appIcon from "../src-tauri/icons/128x128@2x.png";
 import { ExternalLink } from "./ExternalLink";
 import {
@@ -7,7 +7,6 @@ import {
   ExportIcon,
   GitHubIcon,
   InfoIcon,
-  KeyboardIcon,
   MenuBarIcon,
   ShieldIcon,
 } from "./icons";
@@ -19,8 +18,11 @@ import {
   showAbout,
   startCapture,
   type AppStatus,
+  type ShortcutStatus,
 } from "./ipc";
 import { detectPlatform, shortcutLabel } from "./platform";
+import { ShortcutRow } from "./ShortcutRow";
+import { StatusRow, type Tone } from "./StatusRow";
 import { UpdatesRow } from "./Updates";
 import { useAppInfo } from "./useAppInfo";
 import { useFitWindow } from "./useFitWindow";
@@ -34,32 +36,6 @@ const FEATURES = [
   { title: "Export", text: "Copy to clipboard or save as PNG.", icon: <ExportIcon /> },
 ] as const;
 
-type Tone = "ok" | "warning" | "neutral";
-
-function StatusRow(props: {
-  icon: ReactNode;
-  title: string;
-  value: string;
-  tone: Tone;
-  children?: ReactNode;
-}) {
-  return (
-    <li className="status-row">
-      <span className="status-icon">{props.icon}</span>
-      <div className="status-body">
-        <div className="status-line">
-          <span className="status-title">{props.title}</span>
-          <span className="status-value" data-tone={props.tone}>
-            <span className="status-dot" aria-hidden="true" />
-            {props.value}
-          </span>
-        </div>
-        {props.children}
-      </div>
-    </li>
-  );
-}
-
 export function App() {
   const info = useAppInfo();
   const [status, setStatus] = useState<AppStatus | null>(null);
@@ -67,6 +43,10 @@ export function App() {
 
   const refresh = useCallback(() => {
     void appStatus().then(setStatus);
+  }, []);
+
+  const shortcutChanged = useCallback((shortcut: ShortcutStatus) => {
+    setStatus((current) => current && { ...current, shortcut });
   }, []);
 
   const layout = useRef<HTMLDivElement>(null);
@@ -186,21 +166,13 @@ export function App() {
             )}
           </StatusRow>
 
-          {shortcut && shortcutText && (
-            <StatusRow
-              icon={<KeyboardIcon />}
-              title="Global shortcut"
-              value={shortcut.registered ? shortcutText : "Unavailable"}
-              tone={shortcut.registered ? "ok" : "warning"}
-            >
-              {!shortcut.registered && (
-                <p className="status-detail" role="alert">
-                  <kbd>{shortcutText}</kbd> could not be registered, probably because another app
-                  uses it ({shortcut.error}). Use <strong>Capture</strong> in the {trayName}{" "}
-                  instead.
-                </p>
-              )}
-            </StatusRow>
+          {shortcut && (
+            <ShortcutRow
+              shortcut={shortcut}
+              platform={platform}
+              trayName={trayName}
+              onChange={shortcutChanged}
+            />
           )}
 
           <UpdatesRow current={info?.version} />

@@ -286,6 +286,12 @@ a {
   font-weight: 500;
 }
 
+.status-aside {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .status-value {
   display: inline-flex;
   align-items: center;
@@ -512,8 +518,19 @@ a {
   color: var(--text);
 }
 
-.update-error {
+.update-error,
+.shortcut-error {
   color: var(--error);
+}
+
+/* Takes focus while recording, so a key press never activates the button that started it. */
+.shortcut-recorder {
+  color: var(--text);
+  outline: none;
+}
+
+.shortcut-detail .actions {
+  margin-top: 6px;
 }
 
 /* Notes arrive as plain text; keep their line breaks and keep the window short. */
