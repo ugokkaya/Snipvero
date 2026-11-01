@@ -51,7 +51,8 @@ src-tauri/
   capabilities/fit-to-content.json  main, about: window:allow-set-size (fit to content)
   capabilities/about.json     about: window:allow-close (Escape); no window has an `updater:` permission
   src/lib.rs                  builder, single instance, close→hide, exit policy, command registration
-  src/tray.rs                 tray icon (macOS: template image) and menu (Capture, Open Snipvero, About Snipvero, Check for Updates…, Quit)
+  src/tray.rs                 tray icon (macOS: template image) and menu (Capture, Open Snipvero, Open at Login [macOS], About Snipvero, Check for Updates…, Quit)
+  src/login_item/{mod,macos}.rs  Open at Login (SMAppService.mainApp) and login-launch detection (ADR-033)
    src/about.rs                About window (created on demand), app metadata, fixed links (website, repository, contributors, license)
   src/update.rs               user-started update check, download, install and restart (tauri-plugin-updater, ADR-028)
   src/shortcut.rs             global shortcut registration, validation, change/suspend commands, status/error reporting
@@ -76,7 +77,8 @@ src-tauri/
 
 - **Background app:** on macOS the activation policy is `Accessory` (and `LSUIElement` in the bundle),
   so there is no Dock icon. On Windows the app lives in the notification area.
-- **Main window:** shown at launch. Closing it hides it (`CloseRequested` → `prevent_close` + `hide`).
+- **Main window:** created hidden and shown at `RunEvent::Ready`, except when macOS opened the app
+  as a login item (ADR-033): then only the menu bar icon appears. Closing it hides it (`CloseRequested` → `prevent_close` + `hide`).
   It can be reopened from the tray (**Open Snipvero**) or by launching the app again. Its
   **Capture Region** button calls `start_capture`, which runs the same `overlay::start` as the tray
   and the shortcut, on the main thread.
@@ -86,6 +88,9 @@ src-tauri/
   (`close_policy`: only `main` hides). It works while the main window is hidden.
 - **Exit:** only the tray **Exit** / **Quit Snipvero** item ends the process (`app.exit(0)`).
   Implicit exit requests (`RunEvent::ExitRequested` with no exit code) are prevented.
+- **Open at Login (macOS):** a checkable tray item registers or unregisters the app with
+  `SMAppService.mainApp`. Its check mark shows the system's status, read again on every tray click,
+  because the user can also change it in System Settings › General › Login Items.
 - **Single instance:** `tauri-plugin-single-instance` is registered first. A second launch exits
   and the running instance shows its main window.
 - **Global shortcut:** registered at startup by `tauri-plugin-global-shortcut`: the saved one from
