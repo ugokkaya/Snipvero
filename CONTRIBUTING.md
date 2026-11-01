@@ -33,6 +33,10 @@ cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings &
 On macOS, `pnpm tauri build --bundles app,dmg` followed by `pnpm verify:macos` checks the bundle as
 CI does.
 
+On Windows/MSVC, `build.rs` embeds `src-tauri/windows-app-manifest.xml` into the application and
+test executables (ADR-029). Keep it: the Tauri mock-runtime tests need Common Controls v6 to load.
+No special test runner or local environment variable is required.
+
 In the pull request, describe what you tested by hand and on which OS. Behaviour that was only
 checked on one platform should say so.
 
