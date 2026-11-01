@@ -724,3 +724,28 @@ privileges`), and Snipvero never sees a password. After a successful install the
   screenshot data, paths or identifiers (NFR-2).
 - **Commands:** `shortcut_set(accelerator | null)` and `shortcut_suspend(suspended)`, accepted from
   the main window only.
+
+## ADR-031: Separate website and source repository links
+
+- **Status:** implemented (2026-11-01); automated checks on macOS only, native link-opening QA pending.
+- **Context:** the project now has an official website, `https://snipvero.app`.
+- **Decision:** add a website link to the main footer and About details while keeping GitHub and
+  contributors links. `bundle.homepage` now names the website; the Cargo repository remains GitHub.
+  This supersedes ADR-024's equality of homepage and repository. Rust returns the fixed website in
+  `app_info` and accepts `website` in the existing `open_link` enum; no arbitrary URL, webview
+  navigation, network client or dependency is added. Only an explicit click opens the browser.
+- **Verification:** frontend tests cover the website href and non-navigating click in both windows;
+  Rust tests cover its fixed destination, enum name and bundle metadata consistency.
+
+## ADR-032: Public support email in About
+
+- **Status:** implemented (2026-11-01); automated checks on macOS only, native mail-app QA pending.
+- **Decision:** About shows Contact with `support@snipvero.app`. This supersedes ADR-024's
+  no-contact-details choice for this explicitly approved public address only. Rust supplies the
+  address through `app_info`; `open_link` accepts a `support` enum variant and opens only the
+  fixed mailto destination using the existing system opener. No arbitrary URL, email sender,
+  subject/body, attachments, network client or dependency is added. The user composes and sends
+  the message in their default mail app; the webview never navigates.
+- **Verification:** frontend tests cover the displayed address, mailto href and non-navigating
+  command dispatch; Rust tests cover the fixed destination and enum name. Windows remains
+  without native link opening, as before.

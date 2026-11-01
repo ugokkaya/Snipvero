@@ -9,7 +9,7 @@ interface Props {
   children: ReactNode;
 }
 
-/** A link that Rust opens in the default browser; the web view itself never navigates away. */
+/** Rust opens the default browser or mail app; the web view never navigates away. */
 export function ExternalLink({ link, href, className, children }: Props) {
   return (
     <a

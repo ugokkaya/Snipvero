@@ -44,6 +44,8 @@ pub fn show(app: &AppHandle) {
 /// from `tauri.conf.json` in the app binary (checked in the 0.1.0-beta.1 release build), so they
 /// come from here; a test keeps `tauri.conf.json` equal to them.
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
+const WEBSITE: &str = "https://snipvero.app";
+const SUPPORT_EMAIL: &str = "support@snipvero.app";
 const COPYRIGHT: &str = "© 2026 Snipvero Contributors";
 
 /// App metadata for the frontend, which never repeats it. Name and version come from
@@ -54,6 +56,8 @@ pub struct AppInfo {
     name: String,
     version: String,
     copyright: &'static str,
+    website: &'static str,
+    support_email: &'static str,
     repository: String,
     contributors: String,
 }
@@ -64,6 +68,8 @@ pub fn info(app: &AppHandle) -> AppInfo {
         name: package.name.clone(),
         version: package.version.to_string(),
         copyright: COPYRIGHT,
+        website: WEBSITE,
+        support_email: SUPPORT_EMAIL,
         repository: web_url(REPOSITORY, Link::Repository).unwrap_or_default(),
         contributors: web_url(REPOSITORY, Link::Contributors).unwrap_or_default(),
     }
@@ -73,21 +79,27 @@ pub fn info(app: &AppHandle) -> AppInfo {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Link {
+    Support,
+    Website,
     Repository,
     Contributors,
     License,
 }
 
-/// Web address of `link`, derived from the project page. Only `https` pages qualify.
+/// Fixed destinations; repository-derived pages must use HTTPS.
 fn web_url(homepage: &str, link: Link) -> Option<String> {
+    if link == Link::Support {
+        return Some(format!("mailto:{SUPPORT_EMAIL}"));
+    }
     let homepage = homepage.trim_end_matches('/');
     if !homepage.starts_with("https://") {
         return None;
     }
     match link {
+        Link::Website => Some(WEBSITE.to_string()),
         Link::Repository => Some(homepage.to_string()),
         Link::Contributors => Some(format!("{homepage}/graphs/contributors")),
-        Link::License => None,
+        Link::License | Link::Support => None,
     }
 }
 
@@ -105,7 +117,7 @@ pub fn open(app: &AppHandle, link: Link) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{COPYRIGHT, Link, REPOSITORY, web_url};
+    use super::{COPYRIGHT, Link, REPOSITORY, WEBSITE, web_url};
 
     const HOMEPAGE: &str = "https://github.com/ugokkaya/Snipvero";
 
@@ -122,12 +134,20 @@ mod tests {
     #[test]
     fn tauri_config_matches_the_about_metadata() {
         let config = include_str!("../tauri.conf.json");
-        assert!(config.contains(&format!("\"homepage\": \"{REPOSITORY}\"")));
+        assert!(config.contains(&format!("\"homepage\": \"{WEBSITE}\"")));
         assert!(config.contains(&format!("\"copyright\": \"{COPYRIGHT}\"")));
     }
 
     #[test]
     fn links_derive_from_the_project_page() {
+        assert_eq!(
+            web_url(HOMEPAGE, Link::Support).as_deref(),
+            Some("mailto:support@snipvero.app")
+        );
+        assert_eq!(
+            web_url(HOMEPAGE, Link::Website).as_deref(),
+            Some("https://snipvero.app")
+        );
         assert_eq!(
             web_url(HOMEPAGE, Link::Repository).as_deref(),
             Some(HOMEPAGE)
@@ -153,6 +173,8 @@ mod tests {
     #[test]
     fn link_names_match_the_frontend() {
         for (name, link) in [
+            ("support", Link::Support),
+            ("website", Link::Website),
             ("repository", Link::Repository),
             ("contributors", Link::Contributors),
             ("license", Link::License),

@@ -6,6 +6,9 @@ with arrows, frame them with rectangles, add a note, then copy the result or sav
 Everything happens on your computer. Snipvero connects to the internet only when you ask it to
 check for updates.
 
+**Website:** [snipvero.app](https://snipvero.app) ·
+**Support:** [support@snipvero.app](mailto:support@snipvero.app)
+
 > **Status: beta (0.1.0-beta.3).** macOS on Apple silicon is the only supported platform. See
 > [Download](#download) and [Known limitations](#known-limitations).
 
@@ -82,6 +85,11 @@ run `brew trust --cask ugokkaya/tap/snipvero`, then retry the install. This does
 Gatekeeper. If you already installed Snipvero manually, quit it and back up that copy before
 switching installation methods; do not force an overwrite.
 
+For an existing Homebrew installation, run `brew update` then
+`brew upgrade --cask --greedy ugokkaya/tap/snipvero`. The `--greedy` option includes casks marked
+as self-updating, like Snipvero. This installs only the version currently published in the Tap;
+committing source changes alone does not update the distributed app.
+
 ### Updates
 
 Starting with Beta 3, Snipvero can update itself: click **Check for Updates…** in the **Updates**
@@ -135,7 +143,9 @@ To keep it, copy `Snipvero.app` from `src-tauri/target/release/bundle/macos/` in
 `/Applications`. No certificate or Apple Developer account is needed: the build is signed ad hoc,
 which macOS accepts for apps built on the same Mac. Its icon appears in the menu bar, and the Snipvero
 window opens: a **Capture Region** button with its shortcut, the Screen Recording permission
-status and links to **About Snipvero** and the GitHub repository.
+status and links to **About Snipvero**, [snipvero.app](https://snipvero.app) and the GitHub repository.
+The About window also lists **support@snipvero.app** under Contact. Clicking it opens a new
+message in your default email app; Snipvero does not send email itself.
 
 `pnpm tauri build --bundles app,dmg` also produces a disk image in
 `src-tauri/target/release/bundle/dmg/`. An ad-hoc signed disk image is fine for your own use, but
@@ -208,8 +218,8 @@ If another app already uses the shortcut, the Snipvero window says so; choose an
   to `release-assets.githubusercontent.com`). The requests contain no version number, identifier
   or cookie; like any web request, they show GitHub your IP address, the time, and the updater's
   User-Agent (`tauri-plugin-updater/<version>`). GitHub's privacy statement applies to that data.
-- The app's content security policy only allows its own local resources. The GitHub links in the
-  app open the project page in your browser, and only when you click them.
+- The app's content security policy only allows its own local resources. Website and GitHub links
+  open in your browser, and only when you click them.
 - Screenshots are processed on your Mac and stay in memory; they are discarded when a capture
   ends. Nothing is written to disk unless you save a file, and then only the file you choose.
 - A capture shortcut you choose is stored in `~/Library/Application Support/com.snipvero.app/settings.json`.

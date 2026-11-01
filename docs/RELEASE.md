@@ -521,6 +521,8 @@ versioned GitHub release URL, `app "Snipvero.app"`, `arch: :arm64` and `macos: :
 It declares `auto_updates true`, because the app can update itself (ADR-028). It never disables
 Gatekeeper, clears quarantine, resets permissions, or deletes screenshots.
 Beta livecheck is skipped so the stable GitHub latest-release feed cannot silently change channels.
+The cask homepage is `https://snipvero.app`. A homepage-only metadata change does not require a
+new app release: keep the existing version, immutable download URL and checksum unchanged.
 
 After explicit approval to create/push the tap and a publicly downloadable signed release:
 

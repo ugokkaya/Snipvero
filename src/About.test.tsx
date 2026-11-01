@@ -25,6 +25,8 @@ const INFO: AppInfo = {
   name: "Snipvero",
   version: "9.8.7-test.1",
   copyright: "© 2026 Snipvero Contributors",
+  website: "https://snipvero.app",
+  supportEmail: "support@snipvero.app",
   repository: "https://github.com/ugokkaya/Snipvero",
   contributors: "https://github.com/ugokkaya/Snipvero/graphs/contributors",
 };
@@ -74,9 +76,12 @@ describe("About window", () => {
     );
   });
 
-  it("shows no email address or other private contact details", () => {
-    expect(text()).not.toMatch(/@/);
-    expect(container.querySelector('a[href^="mailto:"]')).toBeNull();
+  it("shows only the public support email address", () => {
+    const links = container.querySelectorAll('a[href^="mailto:"]');
+    expect(links).toHaveLength(1);
+    expect(links[0]?.getAttribute("href")).toBe("mailto:support@snipvero.app");
+    expect(links[0]?.textContent).toBe("support@snipvero.app");
+    expect(text().match(/@/g)).toHaveLength(1);
   });
 
   /** The value cell of the details row labelled `label`. */
@@ -87,14 +92,23 @@ describe("About window", () => {
     return value;
   }
 
-  it("lists developer, source code, contributors and license, in that order", () => {
+  it("lists developer, website, contact, source code, contributors and license, in that order", () => {
     const labels = [...container.querySelectorAll("dt")].map((dt) => dt.textContent);
-    expect(labels).toEqual(["Developer", "Source Code", "Contributors", "License"]);
+    expect(labels).toEqual([
+      "Developer",
+      "Website",
+      "Contact",
+      "Source Code",
+      "Contributors",
+      "License",
+    ]);
     expect(row("Developer").textContent).toBe(DEVELOPER);
     expect(row("License").textContent).toContain("MIT License");
   });
 
   it.each([
+    ["Website", "https://snipvero.app", "snipvero.app", "website"],
+    ["Contact", "mailto:support@snipvero.app", "support@snipvero.app", "support"],
     [
       "Source Code",
       "https://github.com/ugokkaya/Snipvero",
@@ -120,7 +134,7 @@ describe("About window", () => {
     const controls = [
       ...container.querySelectorAll<HTMLElement>(".about-details a, .about-details button"),
     ];
-    expect(controls).toHaveLength(3);
+    expect(controls).toHaveLength(5);
     for (const control of controls) {
       expect(control.tabIndex).toBeGreaterThanOrEqual(0);
       control.focus();

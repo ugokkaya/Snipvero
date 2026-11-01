@@ -25,14 +25,13 @@ export function caskFor(version, sha256) {
   url "https://github.com/ugokkaya/Snipvero/releases/download/v#{version}/Snipvero_#{version}_aarch64.dmg"
   name "Snipvero"
   desc "Screenshot and annotation tool"
-  homepage "https://github.com/ugokkaya/Snipvero"
+  homepage "https://snipvero.app"
 
   livecheck do
     skip "Beta channel: updated after a verified release"
   end
 
   auto_updates true
-
   depends_on arch: :arm64
   depends_on macos: :sonoma
 

@@ -34,6 +34,8 @@ const INFO: AppInfo = {
   // Not the real version: the page must show whatever the metadata says.
   version: "9.8.7-test.1",
   copyright: "© 2026 Snipvero Contributors",
+  website: "https://snipvero.app",
+  supportEmail: "support@snipvero.app",
   repository: "https://github.com/ugokkaya/Snipvero",
   contributors: "https://github.com/ugokkaya/Snipvero/graphs/contributors",
 };
@@ -250,12 +252,20 @@ describe("main window", () => {
 
   it("links to the GitHub repository through Rust, without navigating", async () => {
     await render();
-    const link = container.querySelector<HTMLAnchorElement>("a.footer-link");
+    const link = container.querySelector<HTMLAnchorElement>(`a[href="${INFO.repository}"]`);
     expect(link?.getAttribute("href")).toBe("https://github.com/ugokkaya/Snipvero");
     expect(link?.textContent).toBe("GitHub");
     link?.focus();
     expect(document.activeElement).toBe(link);
     expect(await click(link as Element)).toBe(false);
     expect(ipc.openLink).toHaveBeenCalledWith("repository");
+  });
+
+  it("opens the website through Rust without navigating", async () => {
+    await render();
+    const link = container.querySelector<HTMLAnchorElement>(`a[href="${INFO.website}"]`);
+    expect(link?.textContent).toBe("snipvero.app");
+    expect(await click(link as Element)).toBe(false);
+    expect(ipc.openLink).toHaveBeenCalledWith("website");
   });
 });

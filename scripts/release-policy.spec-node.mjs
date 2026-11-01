@@ -27,6 +27,7 @@ test("cask pins the final checksum and supported platform, without security bypa
   assert.ok(cask.includes("/v#{version}/Snipvero_#{version}_aarch64.dmg"));
   assert.ok(cask.includes("arch: :arm64"));
   assert.ok(cask.includes("macos: :sonoma"));
+  assert.ok(cask.includes('homepage "https://snipvero.app"'));
   assert.ok(cask.includes('app "Snipvero.app"'));
   // The app can update itself from its About window (ADR-028).
   assert.ok(cask.includes("auto_updates true"));

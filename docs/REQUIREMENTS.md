@@ -8,23 +8,23 @@
 
 ## Functional requirements (MVP)
 
-| ID    | Requirement                                                                                                                                      |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| FR-1  | Trigger capture with a global keyboard shortcut. Default: `Cmd+Shift+2` (macOS), `Ctrl+Shift+2` (Windows).                                       |
-| FR-2  | Capture all monitors and show the frozen image as a fullscreen overlay on each monitor.                                                          |
-| FR-3  | Select a rectangular region with the mouse (drag, then move/resize). Selection is confined to one monitor. See FR-3 details below.               |
-| FR-4  | Show an annotation toolbar next to the selection that stays on screen near monitor edges.                                                        |
-| FR-5  | Annotate with arrows, rectangles and text. Undo/redo.                                                                                            |
-| FR-6  | Copy the annotated region to the clipboard as an image at native (physical pixel) resolution.                                                    |
-| FR-7  | Save the annotated region as PNG via a save dialog.                                                                                              |
-| FR-8  | Run in the macOS menu bar / Windows system tray with **Capture**, **About** and **Exit** actions. Closing the main window keeps the app running. |
-| FR-9  | `Escape` cancels the capture from any state and closes all overlays.                                                                             |
-| FR-10 | Only one instance runs at a time. A second launch brings the existing instance forward.                                                          |
-| FR-11 | macOS: detect a missing Screen Recording permission and guide the user to grant it.                                                              |
-| FR-12 | The main window starts a capture (Capture Region), shows the shortcut, permission and shortcut status, and links to About and GitHub.            |
-| FR-13 | An About window (main window and tray **About Snipvero**) shows the name, the version from the app metadata, license and project page.           |
-| FR-14 | The About window checks for a newer version only when the user asks and installs it only after explicit consent. See FR-14 details below.        |
-| FR-15 | Change the capture shortcut from the main window and reset it to the default; it is kept across restarts. See ADR-030.                           |
+| ID    | Requirement                                                                                                                                          |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-1  | Trigger capture with a global keyboard shortcut. Default: `Cmd+Shift+2` (macOS), `Ctrl+Shift+2` (Windows).                                           |
+| FR-2  | Capture all monitors and show the frozen image as a fullscreen overlay on each monitor.                                                              |
+| FR-3  | Select a rectangular region with the mouse (drag, then move/resize). Selection is confined to one monitor. See FR-3 details below.                   |
+| FR-4  | Show an annotation toolbar next to the selection that stays on screen near monitor edges.                                                            |
+| FR-5  | Annotate with arrows, rectangles and text. Undo/redo.                                                                                                |
+| FR-6  | Copy the annotated region to the clipboard as an image at native (physical pixel) resolution.                                                        |
+| FR-7  | Save the annotated region as PNG via a save dialog.                                                                                                  |
+| FR-8  | Run in the macOS menu bar / Windows system tray with **Capture**, **About** and **Exit** actions. Closing the main window keeps the app running.     |
+| FR-9  | `Escape` cancels the capture from any state and closes all overlays.                                                                                 |
+| FR-10 | Only one instance runs at a time. A second launch brings the existing instance forward.                                                              |
+| FR-11 | macOS: detect a missing Screen Recording permission and guide the user to grant it.                                                                  |
+| FR-12 | The main window starts a capture (Capture Region), shows the shortcut, permission and shortcut status, and links to About, the website and GitHub.   |
+| FR-13 | An About window (main window and tray **About Snipvero**) shows the name, the version from the app metadata, license, website and source repository. |
+| FR-14 | The About window checks for a newer version only when the user asks and installs it only after explicit consent. See FR-14 details below.            |
+| FR-15 | Change the capture shortcut from the main window and reset it to the default; it is kept across restarts. See ADR-030.                               |
 
 ### FR-3 details: region selection
 

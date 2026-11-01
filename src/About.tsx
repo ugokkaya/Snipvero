@@ -41,6 +41,26 @@ export function About() {
           <dd>{DEVELOPER}</dd>
         </div>
         <div>
+          <dt>Website</dt>
+          <dd>
+            {info && (
+              <ExternalLink link="website" href={info.website}>
+                {displayUrl(info.website)}
+              </ExternalLink>
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt>Contact</dt>
+          <dd>
+            {info && (
+              <ExternalLink link="support" href={`mailto:${info.supportEmail}`}>
+                {info.supportEmail}
+              </ExternalLink>
+            )}
+          </dd>
+        </div>
+        <div>
           <dt>Source Code</dt>
           <dd>
             {info && (

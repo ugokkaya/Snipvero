@@ -135,6 +135,8 @@ export interface AppInfo {
   name: string;
   version: string;
   copyright: string;
+  website: string;
+  supportEmail: string;
   repository: string;
   contributors: string;
 }
@@ -148,7 +150,7 @@ export const startCapture = () => invoke("start_capture");
 export const showAbout = () => invoke("show_about");
 
 /** The fixed destinations Rust can open; the page never passes an address (ADR-024). */
-export type Link = "repository" | "contributors" | "license";
+export type Link = "website" | "support" | "repository" | "contributors" | "license";
 
 export const openLink = (link: Link) => invoke("open_link", { link });
 
