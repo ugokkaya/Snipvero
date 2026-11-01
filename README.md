@@ -85,6 +85,11 @@ run `brew trust --cask ugokkaya/tap/snipvero`, then retry the install. This does
 Gatekeeper. If you already installed Snipvero manually, quit it and back up that copy before
 switching installation methods; do not force an overwrite.
 
+For an existing Homebrew installation, run `brew update` then
+`brew upgrade --cask --greedy ugokkaya/tap/snipvero`. The `--greedy` option includes casks marked
+as self-updating, like Snipvero. This installs only the version currently published in the Tap;
+committing source changes alone does not update the distributed app.
+
 ### Updates
 
 Starting with Beta 3, Snipvero can update itself: click **Check for Updates…** in the **Updates**
