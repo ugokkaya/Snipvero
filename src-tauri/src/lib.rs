@@ -5,6 +5,7 @@ mod events;
 mod export;
 mod geometry;
 mod overlay;
+mod settings;
 mod shortcut;
 mod system;
 mod transfer;
@@ -43,6 +44,8 @@ pub fn run() {
             open_link,
             open_screen_recording_settings,
             restart_app,
+            shortcut::shortcut_set,
+            shortcut::shortcut_suspend,
             update::update_check,
             update::update_install,
             update::update_cancel,
@@ -51,7 +54,7 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             tray::create(app.handle())?;
-            shortcut::register(app.handle(), shortcut::DEFAULT_ACCELERATOR);
+            shortcut::register_saved(app.handle());
             overlay::precreate_in_background(app.handle());
             overlay::watch_displays(app.handle());
             devtools::start_from_args(app.handle());
@@ -63,6 +66,10 @@ pub fn run() {
             {
                 api.prevent_close();
                 let _ = window.hide();
+            }
+            // Recording a new shortcut ends when the window loses focus; never leave it released.
+            WindowEvent::Focused(false) if window.label() == MAIN_WINDOW => {
+                shortcut::suspend(window.app_handle(), false);
             }
             // A download started there shows its progress only there; nothing is installed yet.
             WindowEvent::Destroyed if window.label() == about::LABEL => {

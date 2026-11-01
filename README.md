@@ -179,7 +179,7 @@ keeps the app running in the menu bar. Choose **Open Snipvero** to show the wind
 
 | Shortcut                                                       | Action                                                 |
 | -------------------------------------------------------------- | ------------------------------------------------------ |
-| <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>2</kbd>                   | Start a capture (anywhere)                             |
+| <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>2</kbd>                   | Start a capture (anywhere; can be changed, see below)  |
 | <kbd>Return</kbd> or <kbd>Cmd</kbd>+<kbd>C</kbd>               | Copy the region to the clipboard and close             |
 | <kbd>Cmd</kbd>+<kbd>S</kbd>                                    | Save the region as PNG                                 |
 | <kbd>Cmd</kbd>+<kbd>Z</kbd>                                    | Undo                                                   |
@@ -189,8 +189,14 @@ keeps the app running in the menu bar. Choose **Open Snipvero** to show the wind
 | <kbd>Return</kbd> / <kbd>Cmd</kbd>+<kbd>C</kbd> in a text note | New line / copy the selected text (they do not export) |
 | <kbd>Cmd</kbd>+<kbd>S</kbd> in a text note                     | Finish the note and save the region with it            |
 
-If another app already uses <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>2</kbd>, the Snipvero window says
-so; **Capture** in the menu bar still works. Changing the shortcut is not available yet.
+To use another capture shortcut, click **Change…** in the Global shortcut row of the Snipvero
+window and press the new combination (<kbd>Esc</kbd> cancels). It needs two modifier keys, such as
+<kbd>Cmd</kbd>+<kbd>Shift</kbd> or <kbd>Ctrl</kbd>+<kbd>Option</kbd>, or one with a function key,
+so other apps keep their own shortcuts. **Reset to ⌘⇧2** restores the default. Snipvero remembers
+the choice across restarts.
+
+If another app already uses the shortcut, the Snipvero window says so; choose another one, or use
+**Capture** in the menu bar. macOS does not always report a combination another app also uses.
 
 ## Privacy
 
@@ -206,13 +212,15 @@ so; **Capture** in the menu bar still works. Changing the shortcut is not availa
   app open the project page in your browser, and only when you click them.
 - Screenshots are processed on your Mac and stay in memory; they are discarded when a capture
   ends. Nothing is written to disk unless you save a file, and then only the file you choose.
+- A capture shortcut you choose is stored in `~/Library/Application Support/com.snipvero.app/settings.json`.
+  The file holds only the shortcut.
 - Copying puts the image on the system clipboard, where other apps can read it, as with any copy.
 
 ## Known limitations
 
 - Beta software. See [Download](#download) for installation requirements and the older Beta 1 warning.
 - A selection stays on one display; it cannot span several displays.
-- No settings yet: the shortcut, colours and sizes are fixed, and there is no launch at login.
+- Only the capture shortcut can be changed: colours and sizes are fixed, and there is no launch at login.
 - Unplugging or rearranging displays during a capture ends that capture.
 - Apple silicon only; Intel Macs are untested.
 

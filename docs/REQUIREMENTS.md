@@ -24,6 +24,7 @@
 | FR-12 | The main window starts a capture (Capture Region), shows the shortcut, permission and shortcut status, and links to About and GitHub.            |
 | FR-13 | An About window (main window and tray **About Snipvero**) shows the name, the version from the app metadata, license and project page.           |
 | FR-14 | The About window checks for a newer version only when the user asks and installs it only after explicit consent. See FR-14 details below.        |
+| FR-15 | Change the capture shortcut from the main window and reset it to the default; it is kept across restarts. See ADR-030.                           |
 
 ### FR-3 details: region selection
 
@@ -89,7 +90,7 @@
 ## Out of scope for the MVP
 
 - Selection spanning multiple monitors
-- Launch at login, settings UI, shortcut customization UI, themes
+- Launch at login, a settings window, themes (changing the capture shortcut is FR-15)
 - Additional tools (blur, pen, highlighter, counters), upload/sharing of any kind
 - Automatic update checks (a possible later opt-in setting, ADR-028)
 - Linux support

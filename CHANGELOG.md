@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Change the capture shortcut: **Change…** in the main window's Global shortcut row records a new
+  combination, and **Reset to ⌘⇧2** restores the default. It is kept across restarts. Combinations
+  the system or most apps rely on are refused, and a change that cannot be registered keeps the
+  previous shortcut.
+
+### Privacy
+
+- The chosen shortcut is stored in `settings.json` in Snipvero's Application Support folder. The
+  file holds only the shortcut, never screenshots or file names.
+
 ## 0.1.0-beta.3 — 2026-11-01
 
 ### Added
