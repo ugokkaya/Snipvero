@@ -6,7 +6,7 @@ with arrows, frame them with rectangles, add a note, then copy the result or sav
 Everything happens on your computer. Snipvero connects to the internet only when you ask it to
 check for updates.
 
-> **Status: beta (0.1.0-beta.2).** macOS on Apple silicon is the only supported platform. See
+> **Status: beta (0.1.0-beta.3).** macOS on Apple silicon is the only supported platform. See
 > [Download](#download) and [Known limitations](#known-limitations).
 
 ## Features
@@ -54,7 +54,7 @@ Intel Macs are not supported by the beta: an Intel or universal build has not be
 ## Download
 
 The macOS beta is available as a disk image (`.dmg`) for Apple silicon from
-[GitHub Releases](https://github.com/ugokkaya/Snipvero/releases/tag/v0.1.0-beta.2). Each
+[GitHub Releases](https://github.com/ugokkaya/Snipvero/releases/tag/v0.1.0-beta.3). Each
 release lists the SHA-256 checksum of its disk image in `SHA256SUMS.txt`. You need macOS 14 or
 later on a Mac with Apple silicon (M1 or later).
 
@@ -64,7 +64,7 @@ later on a Mac with Apple silicon (M1 or later).
 4. Grant Screen Recording permission when macOS asks for it
    ([Screen Recording permission](#screen-recording-permission)).
 
-**Beta 2 is Developer ID signed and notarized by Apple.** Both the app and DMG have stapled
+**Beta 3 is Developer ID signed and notarized by Apple.** Both the app and DMG have stapled
 notarization tickets. The release is for Apple silicon only; no Intel or universal download is
 provided. Users upgrading from Beta 1 may need to grant Screen Recording permission again because
 the signing identity has changed.
@@ -84,7 +84,7 @@ DMG as above; later versions can then be installed from the About window.
 ### Older Beta 1 download
 
 The original `0.1.0-beta.1` asset is retained unchanged. It is not signed with an Apple Developer ID
-and has not been notarized by Apple. Gatekeeper may block its first launch. Prefer Beta 2; if you
+and has not been notarized by Apple. Gatekeeper may block its first launch. Prefer Beta 3; if you
 choose the older build, only proceed if you trust its source. If macOS blocks Beta 1:
 
 1. Close the message (do not move Snipvero to the Trash).

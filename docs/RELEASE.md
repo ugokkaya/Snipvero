@@ -10,8 +10,9 @@ then, it needs `MACOS_SIGNING_ENABLED=true`; manual runs default to artifacts on
 No workflow creates certificates or changes repository settings.
 The existing `v0.1.0-beta.1` download remains the original ad-hoc build; do not replace its assets.
 `0.1.0-beta.2` is published. The current source version is `0.1.0-beta.3`, the first with in-app
-updates (ADR-028); it is not built for release, and the updater key it needs does not exist yet
-(§6a). The workflow template predates updater packages and must be reviewed for them before any
+updates (ADR-028). Its local release candidate passed Developer ID signing, Apple notarization,
+stapling, Gatekeeper and updater signature verification; the separate updater key is described
+in §6a. The workflow template predates updater packages and must be reviewed for them before any
 activation. No release step authorises registering a self-hosted runner, moving/dispatching the
 workflow template, enabling `MACOS_SIGNING_ENABLED`, or enabling automatic publication.
 

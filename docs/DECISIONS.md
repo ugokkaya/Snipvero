@@ -652,12 +652,17 @@ privileges`), and Snipvero never sees a password. After a successful install the
   the installed copy and replaced it with the genuine package (valid signature, new version, no
   leftovers), and `verify-macos-bundle.mjs --updater` accepted the genuine package and rejected a
   modified app, another key's signature and a mismatched manifest, and rejected the test build
-  itself. Not verified yet: the About window flows in the running app, the administrator prompt,
-  restart after install, and an update between two published releases.
+  itself. The maintainer subsequently verified the local test-build UI scenarios, main-window
+  row, menu-bar entry and install/restart on macOS Apple silicon. The production beta.3 candidate
+  passed Developer ID signing, notarization/stapling, Gatekeeper, signed-version verification and
+  byte-identical DMG/updater app checks. Not verified: the administrator prompt, a clean-Mac
+  quarantined first launch and an update between two published releases.
 
 ## ADR-029: Common Controls v6 manifest in Windows test executables
 
-- **Status:** implemented (2026-11-01); macOS checks run locally, Windows CI verification pending.
+- **Status:** verified (2026-11-01): CI runs `41301374338` (PR #3) and `41301846772`
+  (merged main) pass on macOS and Windows, including tests and bundle smoke checks. Windows
+  runtime support remains unimplemented/unverified.
 - **Context:** updater PR #2 introduced tests using Tauri's MockRuntime. Windows CI run
   `41300382553` compiled the test program but it exited before any test with
   `0xc0000139` (`STATUS_ENTRYPOINT_NOT_FOUND`). Tauri's upstream issue
