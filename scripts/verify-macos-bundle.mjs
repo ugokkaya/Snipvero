@@ -2,7 +2,7 @@
 // file list, architectures, minimum macOS, linked libraries, signature, bundled notices, and that
 // the DMG holds the same app plus an Applications link. macOS only (plutil, codesign, hdiutil).
 //
-//   node scripts/verify-macos-bundle.mjs [--bundle-dir DIR] [--arch arm64|x86_64|universal] [--distribution]
+//   node scripts/verify-macos-bundle.mjs [--bundle-dir DIR] [--arch arm64|x86_64|universal] [--distribution] [--team-id TEAM]
 //
 // --bundle-dir    default src-tauri/target/release/bundle (CI's debug build: .../debug/bundle)
 // --arch          architectures the executable must contain; default arm64
@@ -33,6 +33,11 @@ const option = (name, fallback) => {
 const bundleDir = resolve(option("--bundle-dir", join(root, "src-tauri/target/release/bundle")));
 const archOption = option("--arch", "arm64");
 const distribution = args.includes("--distribution");
+const teamId = option("--team-id", "");
+if (args.includes("--team-id") && !/^[A-Z0-9]{10}$/.test(teamId ?? "")) {
+  console.error("--team-id requires a 10-character Apple Team ID");
+  process.exit(2);
+}
 
 const archs = { arm64: ["arm64"], x86_64: ["x86_64"], universal: ["arm64", "x86_64"] }[archOption];
 const dmgArch = { arm64: "aarch64", x86_64: "x64", universal: "universal" }[archOption];
@@ -113,7 +118,17 @@ function verifyApp(app, label) {
     "Contents/Resources/LICENSE.txt",
     "Contents/Resources/THIRD_PARTY_NOTICES.txt",
     "Contents/_CodeSignature/CodeResources",
-  ].sort();
+  ];
+  // stapler adds the Apple ticket here, separately from _CodeSignature/CodeResources.
+  const ticket = join(app, "Contents/CodeResources");
+  if (existsSync(ticket)) {
+    check(
+      lstatSync(ticket).isFile() && run("xcrun", ["stapler", "validate", app]).status === 0,
+      "extra CodeResources is a valid stapled Apple ticket",
+    );
+    expected.push("Contents/CodeResources");
+  }
+  expected.sort();
   const actual = filesUnder(app);
   check(
     JSON.stringify(actual) === JSON.stringify(expected),
@@ -199,6 +214,7 @@ function verifyApp(app, label) {
       "team identifier",
       field("TeamIdentifier"),
     );
+    if (teamId) check(field("TeamIdentifier") === teamId, "expected signing team", teamId);
     check(run("xcrun", ["stapler", "validate", app]).status === 0, "notarization ticket stapled");
     check(
       assess.status === 0 && /source=Notarized Developer ID/.test(assessment),
@@ -289,10 +305,15 @@ function verifyDmg(standalone) {
 
   if (distribution) {
     const details = run("codesign", ["-dv", "--verbose=4", dmg]).stderr;
+    check(run("codesign", ["--verify", "--strict", dmg]).status === 0, "DMG signature verifies");
     check(
       /^Authority=Developer ID Application:/m.test(details),
       "DMG signed with Developer ID Application",
     );
+    check(/^Timestamp=.+$/m.test(details), "DMG secure timestamp");
+    if (teamId) {
+      check(details.includes(`TeamIdentifier=${teamId}\n`), "DMG expected signing team", teamId);
+    }
     check(
       run("xcrun", ["stapler", "validate", dmg]).status === 0,
       "DMG notarization ticket stapled",

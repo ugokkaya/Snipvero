@@ -5,7 +5,7 @@ need it: press a shortcut, the screen freezes, and you drag out the part you wan
 with arrows, frame them with rectangles, add a note, then copy the result or save it as a PNG.
 Everything happens on your computer. Snipvero never connects to the internet.
 
-> **Status: beta (0.1.0-beta.1).** macOS on Apple silicon is the only supported platform. See
+> **Status: beta (0.1.0-beta.2).** macOS on Apple silicon is the only supported platform. See
 > [Download](#download) and [Known limitations](#known-limitations).
 
 ## Features
@@ -53,7 +53,7 @@ Intel Macs are not supported by the beta: an Intel or universal build has not be
 ## Download
 
 The macOS beta is available as a disk image (`.dmg`) for Apple silicon from
-[GitHub Releases](https://github.com/ugokkaya/Snipvero/releases) once it is published. Each
+[GitHub Releases](https://github.com/ugokkaya/Snipvero/releases/tag/v0.1.0-beta.2). Each
 release lists the SHA-256 checksum of its disk image in `SHA256SUMS.txt`. You need macOS 14 or
 later on a Mac with Apple silicon (M1 or later).
 
@@ -63,9 +63,16 @@ later on a Mac with Apple silicon (M1 or later).
 4. Grant Screen Recording permission when macOS asks for it
    ([Screen Recording permission](#screen-recording-permission)).
 
-**The beta is not signed with an Apple Developer ID and has not been notarized by Apple.** macOS
-Gatekeeper may therefore block the first launch with a message that Apple could not verify
-Snipvero. Only proceed if you trust the source of the application. If macOS blocks it:
+**Beta 2 is Developer ID signed and notarized by Apple.** Both the app and DMG have stapled
+notarization tickets. The release is for Apple silicon only; no Intel or universal download is
+provided. Users upgrading from Beta 1 may need to grant Screen Recording permission again because
+the signing identity has changed.
+
+### Older Beta 1 download
+
+The original `0.1.0-beta.1` asset is retained unchanged. It is not signed with an Apple Developer ID
+and has not been notarized by Apple. Gatekeeper may block its first launch. Prefer Beta 2; if you
+choose the older build, only proceed if you trust its source. If macOS blocks Beta 1:
 
 1. Close the message (do not move Snipvero to the Trash).
 2. Open **System Settings → Privacy & Security** and scroll down to **Security**. A note says
@@ -74,6 +81,10 @@ Snipvero. Only proceed if you trust the source of the application. If macOS bloc
 
 macOS remembers this choice for that copy of Snipvero. Do not turn off Gatekeeper for your whole
 Mac to run Snipvero. If you prefer not to approve a download, build Snipvero from source instead.
+
+This warning applies only to the older `0.1.0-beta.1` download. New releases must pass Developer ID
+signing and Apple notarization checks ([release process](docs/RELEASE.md)). Homebrew
+distribution is being prepared; no official Snipvero cask or tap is published yet.
 
 ## Install from source
 
@@ -168,8 +179,7 @@ so; **Capture** in the menu bar still works. Changing the shortcut is not availa
 
 ## Known limitations
 
-- Beta software. The download is not signed with an Apple Developer ID and not notarized, so
-  macOS asks you to approve its first launch ([Download](#download)).
+- Beta software. See [Download](#download) for installation requirements and the older Beta 1 warning.
 - A selection stays on one display; it cannot span several displays.
 - No settings yet: the shortcut, colours and sizes are fixed, and there is no launch at login.
 - Unplugging or rearranging displays during a capture ends that capture.

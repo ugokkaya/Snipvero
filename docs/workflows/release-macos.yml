@@ -1,0 +1,165 @@
+# Inactive reference template. Do not copy into .github/workflows without separate approval.
+name: macOS release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing reviewed version tag reachable from main (vX.Y.Z[-beta.N])
+        required: true
+        type: string
+      publish:
+        description: Publish after the separate macos-publish environment approval
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-release
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    if: github.ref == 'refs/heads/main' && vars.MACOS_SIGNING_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Validate tag, immutable source and new version/build
+        id: resolve
+        env:
+          TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+          SHA=$(git rev-parse --verify "refs/tags/$TAG^{commit}")
+          git merge-base --is-ancestor "$SHA" HEAD
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq '.[] | select(.draft == false) | .tag_name' > "$RUNNER_TEMP/published-tags.txt"
+          # Any existing release, including a draft, blocks reuse of its tag/assets.
+          HTTP=$(curl --silent --output "$RUNNER_TEMP/existing-release.json" --write-out '%{http_code}' \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/tags/$TAG")
+          [[ "$HTTP" == 404 ]]
+          export SHA
+          node --input-type=module <<'JS'
+          import { execFileSync } from 'node:child_process';
+          import { readFileSync, appendFileSync } from 'node:fs';
+          const read = (ref, path) => JSON.parse(execFileSync('git', ['show', `${ref}:${path}`], { encoding: 'utf8' }));
+          const sha = process.env.SHA;
+          const pkg = read(sha, 'package.json');
+          const config = read(sha, 'src-tauri/tauri.conf.json');
+          if (`v${pkg.version}` !== process.env.TAG || config.version !== pkg.version) throw Error('Tag/version mismatch');
+          const build = config.bundle.macOS.bundleVersion;
+          if (!/^[1-9][0-9]*$/.test(build)) throw Error('Release build number must be an integer');
+          const tags = readFileSync(`${process.env.RUNNER_TEMP}/published-tags.txt`, 'utf8').trim().split('\n').filter(Boolean);
+          for (const tag of tags) {
+            const previous = read(`refs/tags/${tag}`, 'src-tauri/tauri.conf.json').bundle.macOS.bundleVersion;
+            if (BigInt(build) <= BigInt(previous)) throw Error(`Build number must exceed published ${tag}`);
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `sha=${sha}\nversion=${pkg.version}\n`);
+          JS
+
+  sign:
+    needs: preflight
+    environment: macos-signing
+    # Dedicated machine only: never give this label to a personal Mac or any PR runner.
+    runs-on: [self-hosted, macOS, ARM64, snipvero-signing]
+    timeout-minutes: 100
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+    env:
+      APPLE_SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
+      APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+      NOTARY_KEYCHAIN_PROFILE: ${{ vars.NOTARY_KEYCHAIN_PROFILE }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.preflight.outputs.sha }}
+          persist-credentials: false
+          clean: true
+      # pnpm, Node 24+, Rust stable + rustfmt/clippy, Xcode/CLT and the local Keychain
+      # are provisioned by the maintainer. No action imports or exports signing credentials.
+      - name: Preflight local signing access
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(uname -m)" == arm64 ]]
+          node --input-type=module -e 'import {requireSigningConfig} from "./scripts/release-policy.mjs"; requireSigningConfig(process.env.APPLE_SIGNING_IDENTITY, process.env.APPLE_TEAM_ID, process.env.NOTARY_KEYCHAIN_PROFILE)'
+          xcrun notarytool history --keychain-profile "$NOTARY_KEYCHAIN_PROFILE" --output-format json > /dev/null
+          node --input-type=module -e 'import {appendFileSync} from "node:fs"; appendFileSync(process.env.GITHUB_ENV, `CARGO_TARGET_DIR=${process.env.RUNNER_TEMP}/snipvero-build-${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}\nCANDIDATE=${process.env.RUNNER_TEMP}/snipvero-candidate-${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}\n`)'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm notices:check
+      - run: pnpm build
+      - name: Rust checks
+        working-directory: src-tauri
+        run: cargo fmt --check && cargo clippy --locked --all-targets -- -D warnings && cargo test --locked
+      - name: Build signed app, notarize app and DMG, verify distribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          export RUSTFLAGS="--remap-path-prefix=$HOME/.cargo/registry/src=/cargo/registry/src --remap-path-prefix=$HOME/.rustup=/rustup --remap-path-prefix=$GITHUB_WORKSPACE=/snipvero"
+          # The script uses the local profile; prevent accidental Tauri credential-based submission.
+          unset APPLE_ID APPLE_PASSWORD APPLE_API_KEY APPLE_API_ISSUER APPLE_API_KEY_PATH APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD
+          CI=true pnpm tauri build --bundles app -- --locked
+          pnpm notarize:macos --app "$CARGO_TARGET_DIR/release/bundle/macos/Snipvero.app" --output-dir "$CANDIDATE"
+      - name: Upload verified public files only
+        id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: macos-distribution
+          path: |
+            ${{ env.CANDIDATE }}/dist/Snipvero_${{ needs.preflight.outputs.version }}_aarch64.dmg
+            ${{ env.CANDIDATE }}/dist/SHA256SUMS.txt
+            ${{ env.CANDIDATE }}/dist/THIRD_PARTY_NOTICES.txt
+            ${{ env.CANDIDATE }}/dist/snipvero.rb
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    if: inputs.publish
+    needs: [preflight, sign]
+    environment: macos-publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.sign.outputs.artifact-id }}
+          path: distribution
+          merge-multiple: true
+      - name: Verify checksum and publish approved release
+        working-directory: distribution
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+          EXPECTED_SHA: ${{ needs.preflight.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum --check SHA256SUMS.txt
+          # Re-check the immutable tag after environment approval (including annotated tags).
+          REMOTE_SHA=$(gh api "repos/$GH_REPO/commits/$TAG" --jq .sha)
+          [[ "$REMOTE_SHA" == "$EXPECTED_SHA" ]]
+          printf '%s\n' 'Developer ID signed, hardened runtime enabled, app and DMG notarized and stapled.' \
+            'Requires macOS 14+ on Apple silicon. Grant Screen Recording permission when requested.' > notes.md
+          cat SHA256SUMS.txt >> notes.md
+          OPTIONS=()
+          if [[ "$VERSION" == *-* ]]; then OPTIONS+=(--prerelease); fi
+          gh release create "$TAG" --repo "$GH_REPO" --verify-tag --title "Snipvero $VERSION" \
+            --notes-file notes.md "${OPTIONS[@]}" \
+            "Snipvero_${VERSION}_aarch64.dmg" SHA256SUMS.txt THIRD_PARTY_NOTICES.txt
+          # Cask is an artifact for a reviewed tap update, not silently pushed to another repository.

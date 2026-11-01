@@ -6,7 +6,7 @@
   <key>LSUIElement</key>
   <true/>
   <!-- Apple allows only up to three integers here, so the pre-release suffix of the package version
-       (0.1.0-beta.1) is dropped; CFBundleVersion (bundle.macOS.bundleVersion) tells builds apart.
+        (for example, 0.1.0-beta.2) is dropped; CFBundleVersion (bundle.macOS.bundleVersion) tells builds apart.
        Overrides the bundler's value; a Rust test keeps it equal to the package version's core. -->
   <key>CFBundleShortVersionString</key>
   <string>0.1.0</string>

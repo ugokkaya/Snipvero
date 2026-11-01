@@ -522,3 +522,35 @@ Contributors`. Tauri does not embed `bundle.homepage` or `bundle.copyright` in t
 - **Consequences:** Regression tests cover the planted symlink, a 0600 replacement and a taken
   name. Owner, ACLs and extended attributes of a replaced file are still not carried over.
 - **Dependencies:** none added (minimatch only moves a major version in dev tooling).
+
+## ADR-027: Distribution signing keys stay on the Mac
+
+- **Status:** accepted (2026-11-01), maintainer constraint. Developer ID app and DMG notarization,
+  stapling and Gatekeeper acceptance verified on macOS Apple silicon. No Windows runtime test.
+- **Context:** Developer ID Application is now available. The maintainer prohibits uploading Apple
+  certificates and private keys to GitHub, requires successful local notarization before preparing
+  release automation, and requires approval before commit, push or any release creation.
+- **Decision:** retain ad-hoc contributor/CI builds and environment-controlled signing (ADR-011).
+  Set hardened runtime explicitly; add no entitlements or runtime exceptions. Use a local Keychain
+  notary profile, require `Accepted` for the app ZIP and final DMG, staple the app before DMG
+  creation, then require the distribution verifier with the expected Team ID. A process exit alone
+  is not proof of notarization success. A failed, timed-out or pending submission blocks release.
+- **Automation boundary:** no `.p12`/`.p8` GitHub secrets or keychain export. Signing automation
+  requires a separately approved, dedicated self-hosted Mac and protected manual workflow; hosted
+  runners may publish only verified public artifacts. Untrusted PRs must never run on the signing
+  runner. The Mac's local Keychain contains the secrets; GitHub needs only non-secret configuration
+  variables and the built-in publication token. Runner isolation limits are documented in RELEASE.md.
+- **Verification:** Developer ID app has hardened runtime and no entitlements; DMG signature has
+  a secure timestamp. `verify:macos` passes. Before notarization, `--distribution --team-id` correctly
+  fails six ticket/Gatekeeper checks. The verifier now also validates the DMG signature, timestamp
+  and optional expected Team ID for both app copies and DMG. After Apple acceptance, all distribution
+  checks pass. Stapling adds `Contents/CodeResources`; it is allowed only with successful Apple
+  ticket validation, without relaxing the rest of the exact bundle file list.
+- **Implementation:** manual-only opt-in GitHub workflow, default artifact-only, dedicated local
+  signing runner and separate hosted/approved publication job. Shared notarization script fails
+  closed on all non-Accepted statuses, preserves submission IDs, never rebuilds/re-signs the stapled
+  app, creates candidates without overwriting and exports only verified public files. Unit tests
+  cover status/config gates and a version/checksum-pinned Apple silicon/macOS 14+ Homebrew cask.
+  No remote workflow, runner setup, tap push or publication was performed during implementation.
+- **Dependencies:** none added. The published ad-hoc `v0.1.0-beta.1` remains unchanged; use a new
+  package version and bundle build number for a future notarized release, not replacement assets.

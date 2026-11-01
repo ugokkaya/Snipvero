@@ -40,6 +40,8 @@ docs/PROGRESS.md
 *.pem
 *.key
 *.p12
+*.p8
+*.keychain-db
 *.pfx
 *.cer
 *.mobileprovision

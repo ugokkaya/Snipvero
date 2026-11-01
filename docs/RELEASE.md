@@ -3,21 +3,28 @@
 macOS on Apple silicon is the only release platform for the beta. Windows keeps its CI build
 (NSIS smoke bundle) but is not released.
 
-Nothing in this repository publishes a release, creates certificates or changes repository
-settings. Each of those steps is done by a maintainer, by hand.
+The inactive reference template `docs/workflows/release-macos.yml` describes an opt-in signing and
+publication workflow. It is deliberately outside `.github/workflows`, so GitHub cannot dispatch it.
+Moving it into the workflows directory and provisioning a runner require separate approval. Even
+then, it needs `MACOS_SIGNING_ENABLED=true`; manual runs default to artifacts only (`publish=false`).
+No workflow creates certificates or changes repository settings.
+The existing `v0.1.0-beta.1` download remains the original ad-hoc build; do not replace its assets.
+The current release source version is `0.1.0-beta.2`, signed and notarized locally. Publishing this
+release does not authorise registering a self-hosted runner, moving/dispatching the workflow
+template, enabling `MACOS_SIGNING_ENABLED`, or enabling automatic publication.
 
 ## 1. Version
 
 There are two version numbers, because Apple's bundle fields accept integers only (ADR-022).
 
-**Package version** `0.1.0-beta.1` (SemVer pre-release). It lives in three manifests, and
+**Package version** `0.1.0-beta.2` (SemVer pre-release). It lives in three manifests, and
 `manifest_versions_match` (Rust test) fails if they differ:
 
 - `package.json` → `version`
 - `src-tauri/Cargo.toml` → `version` (then run `cargo check` so `Cargo.lock` follows)
 - `src-tauri/tauri.conf.json` → `version`
 
-It names the Git tag (`v0.1.0-beta.1`), the DMG (`Snipvero_0.1.0-beta.1_aarch64.dmg`), the
+It names the Git tag (`v0.1.0-beta.2`), the DMG (`Snipvero_0.1.0-beta.2_aarch64.dmg`), the
 Windows installer and the GitHub Release.
 
 **Bundle versions** in the app's `Info.plist`, both one to three period-separated integers:
@@ -25,7 +32,7 @@ Windows installer and the GitHub Release.
 | Key                          | Value   | Set in                                                     |
 | ---------------------------- | ------- | ---------------------------------------------------------- |
 | `CFBundleShortVersionString` | `0.1.0` | `src-tauri/Info.plist` (overrides the bundler's value)     |
-| `CFBundleVersion`            | `1`     | `tauri.conf.json` → `bundle.macOS.bundleVersion` (a build) |
+| `CFBundleVersion`            | `2`     | `tauri.conf.json` → `bundle.macOS.bundleVersion` (a build) |
 
 `CFBundleShortVersionString` is the package version without its pre-release suffix;
 `bundle_versions_follow_apple_format` (Rust test) fails if it differs or if either value is not in
@@ -186,29 +193,88 @@ Local signing and public distribution differ:
 | `Snipvero Local Development` (ADR-011)      | self-signed, this Mac only                 | rejected                        | keeping the Screen Recording grant                                |
 | Developer ID + notarized + stapled (§6, §7) | Developer ID Application, secure timestamp | accepted                        | the build to publish once available                               |
 
-Only `pnpm verify:macos --distribution` passing makes a build Apple-verified. Until a Developer ID
-exists, a release-profile ad-hoc build that passes `pnpm verify:macos` may be published as a
-**pre-release** whose notes say it is not signed with a Developer ID or notarized (ADR-025, §9).
+Only `pnpm verify:macos --distribution` passing makes a build Apple-verified. The original ad-hoc
+pre-release is historical (ADR-025); future releases must use Developer ID and notarization.
 
-### Signing in GitHub Actions (not set up)
+### Signing automation security boundary
 
-CI builds ad hoc and holds no Apple credentials. If release signing ever moves to CI:
+The maintainer requires Apple certificates and private keys to remain on the signing Mac. Do not
+export a `.p12`, upload a certificate/key as an artifact or add Apple private material to GitHub
+secrets. Hosted GitHub runners therefore cannot perform the signing step with the current policy.
+Normal `ci.yml` remains ad hoc and receives no Apple credentials.
 
-- Put it in a **separate workflow** started by hand (`workflow_dispatch`) or by a tag, never in
-  `ci.yml`: `pull_request` runs execute contributors' code, and secrets must not reach them.
-- Keep the credentials in a protected **GitHub environment** (required reviewer, `main` and tags
-  only), not as plain repository secrets: `APPLE_CERTIFICATE` (base64 `.p12`),
-  `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, and either the API-key or the Apple ID set
-  from §7. Tauri imports the certificate into a temporary keychain when these are set.
-- Prefer an **App Store Connect API key** with the narrowest role over an Apple ID password; write
-  the `.p8` into `$RUNNER_TEMP`, not the workspace, so no artifact upload can include it.
-- Never `echo`, `set -x` or `cat` a secret-derived value; GitHub masks only exact secret strings,
-  not decoded forms (mask a decoded value with `::add-mask::` first).
-- Upload only the DMG and its checksum as artifacts, never `target/`, a keychain or a `.p12`.
-- Pin third-party actions in that workflow to a commit SHA, and rotate the certificate password
-  and API key if a log or artifact may have exposed them.
+The signing workflow needs a **dedicated self-hosted Apple silicon Mac**, an existing local
+Developer ID identity, and an existing local `notarytool` Keychain profile. The runner account must
+have access to those items without interactive prompts; never change keychain trust or export keys
+to work around access failures. Do not use a personal daily-use Mac as a public repository runner.
 
-Adding any of this is the maintainer's decision.
+- Self-hosted runners are not isolated security boundaries. Public repositories can expose them
+  to hostile code; required reviewers alone do not prevent persistence from an earlier job.
+- Restrict the runner to the reviewed release workflow where runner-group controls are available;
+  never route PR jobs or arbitrary branches to it. Otherwise keep signing local until an isolated
+  runner setup is approved. Provisioning/registering a runner is a separate maintainer action.
+- Use manual dispatch from protected `main`, a reviewed immutable tag reachable from `main`, a
+  protected signing environment and a separate protected publication environment. Review the
+  source and dependency changes before approving access to the signing machine.
+- Only allowlisted public distribution files may leave the runner. Never upload a whole workspace,
+  `target/`, `.p8`, `.p12` or Keychain. Pin workflow actions to commit SHAs.
+- Neither signing identity names, Team IDs nor Keychain profile names are private keys; they may
+  be GitHub environment **variables**. The profile's password/API key stays in local Keychain.
+- Same-repository publication can use the built-in short-lived `GITHUB_TOKEN` with `contents: write`
+  only in the publication job; no personal access token or Apple GitHub secret is needed.
+
+No signing workflow may proceed to distribution unless both submissions are `Accepted`, both
+tickets are stapled, and `pnpm verify:macos --distribution --team-id <TEAM_ID>` passes. No release
+creation (including a draft), push or publication is authorised by a local verification run.
+
+### GitHub Actions setup (maintainer approval required)
+
+The template is not registered or run on GitHub. Do not move it into `.github/workflows` for
+the manually published Beta 2 release. Provisioning a runner,
+configuring variables/environments, creating tags, and publishing are separate approval steps.
+
+1. With separate approval, move the reviewed template into `.github/workflows/release-macos.yml`
+   and provision a dedicated runner with labels `self-hosted`, `macOS`, `ARM64`, `snipvero-signing`.
+   Install the project's pnpm version, Node 24+, Rust stable with rustfmt/clippy, Xcode/CLT and `gh`.
+   The runner must have the local signing identity and notary profile available. Never put this
+   runner on public PR jobs. Review runner isolation and repository write access before enabling.
+2. Create protected environments `macos-signing` and `macos-publish`, both with required reviewers,
+   deployment restricted to protected `main`, and administrator bypass disabled where available.
+   Do not enable signing if the repository plan cannot enforce the required protections.
+3. Configure `macos-signing` environment **variables**, not secrets:
+
+   | Variable                  | Value                                                  |
+   | ------------------------- | ------------------------------------------------------ |
+   | `APPLE_SIGNING_IDENTITY`  | Full local `Developer ID Application: … (TEAMID)` name |
+   | `APPLE_TEAM_ID`           | Expected 10-character signing Team ID                  |
+   | `NOTARY_KEYCHAIN_PROFILE` | Local profile, e.g. `snipvero-notary`                  |
+
+   Set repository variable `MACOS_SIGNING_ENABLED=true` only after those protections are in place.
+
+4. **Required GitHub Actions secrets: none to create.** Publication uses the built-in `GITHUB_TOKEN`,
+   scoped to `contents: write` only in its hosted publication job. Apple passwords, `.p8`, `.p12`,
+   certificates and private keys stay off GitHub. No tap PAT is needed: tap changes are reviewed
+   separately, not pushed by this workflow.
+5. With approval, commit the release changes, increase package version and integer bundle build
+   number, push and create an immutable version tag reachable from `main`. Do not reuse
+   `v0.1.0-beta.1`. The workflow rejects an existing release and a build number not greater than
+   published releases. Tag creation is deliberately not automated.
+6. Dispatch **macOS release** from `main`, supplying the existing tag. Leave `publish=false` for
+   validation. Hosted preflight resolves the tag to a commit SHA; only that SHA reaches the Mac.
+   Approve `macos-signing` after reviewing the exact tag, dependencies and workflow.
+7. Signing builds a fresh app in a run-specific target directory, checks tests/notices, submits
+   app and DMG separately, staples both and runs the distribution verifier. Only the final DMG,
+   checksum, notices and generated cask are uploaded as an immutable artifact (14-day retention).
+   A timeout/error/Invalid result stops the job: no artifact publication and no release creation.
+8. To publish a new run, choose `publish=true` explicitly, then separately approve `macos-publish`
+   after the signing job succeeds. The hosted publication job verifies the artifact checksum and
+   unchanged remote tag, then creates the release (pre-release for beta versions). There is no
+   PR, push or tag trigger, and no Apple material reaches the publication job. Do not rerun the
+   workflow just to publish an already published tag; it intentionally refuses reuse.
+
+Self-hosted job work directories are retained for diagnosis; submission IDs/results stay there,
+not in uploaded artifacts. Clean old run directories manually after review; never delete the local
+Keychain. Rotate credentials if the machine or a trusted dependency is compromised.
 
 ## 7. Notarization (requirements)
 
@@ -232,7 +298,7 @@ Gatekeeper check it offline). A keychain profile keeps the password out of the s
 
 ```sh
 xcrun notarytool store-credentials snipvero-notary --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID"
-DMG=src-tauri/target/release/bundle/dmg/Snipvero_0.1.0-beta.1_aarch64.dmg
+DMG=src-tauri/target/release/bundle/dmg/Snipvero_0.1.0-beta.2_aarch64.dmg
 codesign -dv "$DMG"                     # if "not signed at all": codesign --timestamp -s "$APPLE_SIGNING_IDENTITY" "$DMG"
 xcrun notarytool submit "$DMG" --keychain-profile snipvero-notary --wait
 xcrun stapler staple "$DMG"
@@ -240,6 +306,44 @@ xcrun stapler staple "$DMG"
 
 If a submission is rejected, `xcrun notarytool log <submission id> --keychain-profile
 snipvero-notary` lists the reasons.
+
+### Local Keychain-profile verification
+
+Create credentials interactively in Terminal; never paste passwords into chat or command arguments:
+
+```sh
+xcrun notarytool store-credentials snipvero-notary --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID"
+xcrun notarytool history --keychain-profile snipvero-notary --output-format json
+```
+
+Tauri does not use this profile automatically. With profile-based authentication, build/sign the
+app without Tauri notarization credentials, ZIP it with `ditto -c -k --keepParent`, submit that ZIP
+with `notarytool submit --keychain-profile snipvero-notary --wait --output-format json`, and require
+the response's `status` to be exactly `Accepted` (not merely a successful process exit). Staple and
+validate the app **before** copying it into a newly created DMG. Do not run a command that rebuilds
+or re-signs the app after stapling. Sign the final DMG with `codesign --timestamp`, submit it
+separately, require `Accepted`, then staple/validate the DMG and run the distribution verifier.
+
+On timeout or a service error, keep the submission ID, inspect `notarytool info`/`log` and stop;
+do not treat `In Progress` as success or automatically resubmit. Initial Apple processing can take
+much longer than subsequent submissions. Never publish an unstapled or rejected candidate.
+
+The reusable local command implements this sequence without rebuilding the input app:
+
+```sh
+# Build with APPLE_SIGNING_IDENTITY set; do not set Tauri's Apple password/API-key variables.
+pnpm tauri build --bundles app -- --locked
+APPLE_TEAM_ID=TEAMID1234 NOTARY_KEYCHAIN_PROFILE=snipvero-notary \
+  pnpm notarize:macos --app src-tauri/target/release/bundle/macos/Snipvero.app \
+  --output-dir src-tauri/target/release-candidates/unique-candidate-name
+```
+
+Set `APPLE_SIGNING_IDENTITY` in the environment for both commands. The output directory's parent
+must exist; the candidate directory itself must not exist (no overwrites). The script preserves
+the input app, notarizes a copy and exports only verified public files into `<output-dir>/dist/`.
+Submission IDs and results remain in `<output-dir>` for timeout/rejection diagnosis. This command
+never creates, uploads or publishes a GitHub Release. Its DMG has a simple app + Applications
+layout created by `hdiutil`, without Finder AppleScript/Automation permission.
 
 ## 8. Verify before uploading
 
@@ -257,7 +361,8 @@ It checks:
   without suffix) and `CFBundleVersion` (`bundleVersion`) in Apple's format, minimum macOS 14.0,
   `LSUIElement`, copyright.
 - The exact file list of the bundle (executable, `Info.plist`, icon, `LICENSE.txt`,
-  `THIRD_PARTY_NOTICES.txt`, code signature); the bundled notices and license equal the
+  `THIRD_PARTY_NOTICES.txt`, code signature, and optional `Contents/CodeResources` Apple ticket,
+  allowed only when `stapler validate` succeeds); the bundled notices and license equal the
   repository's files.
 - Architectures (`--arch`, default `arm64`), `minos` of every slice, system libraries only.
 - `codesign --verify --deep --strict`, signature identifier, hardened runtime, no entitlements;
@@ -271,21 +376,79 @@ It checks:
 Then on a Mac that has never run Snipvero: download the DMG through a browser (so it is
 quarantined), install it, launch it, grant Screen Recording, take a capture, copy and save.
 
+### Local candidate provenance and preservation
+
+Use a new `src-tauri/target/release-candidates/v0.1.0-beta.2-<timestamp>/` directory for each
+candidate. Freeze a copy of the approved tracked and non-ignored source files into its `source/`
+directory, record their relative paths, modes and SHA-256 values, and build there with a previously
+empty `CARGO_TARGET_DIR` under the candidate's `build/`. Do not reuse the standard bundle output
+or a previous application's executable. Keep existing local DMGs, beta.1 tags and remote assets.
+
+When preparation is approved but committing is not, the base commit SHA alone does **not** identify
+the complete build source. Record the full base SHA, dirty status, working-tree diff and source
+manifest; explicitly describe it as that commit plus approved uncommitted changes. Verify source
+hashes before and after the build and compare the original runtime source files with the base
+commit. Never claim an exact clean-commit build or create a synthetic commit without approval.
+
+After final DMG stapling, mount it read-only and compare every app file's bytes, file modes and
+symlink targets against the freshly built/stapled candidate app. In particular, record matching
+executable and Info.plist hashes, Apple bundle version/build number, signing Team ID and arm64
+architecture. Keep provenance and verification logs beside the candidate, not inside the signed
+app. These checks document source-to-package custody; they are not a reproducible-build guarantee.
+
+The final `notarized/dist/` directory contains the DMG, `SHA256SUMS.txt`, notices, `snipvero.rb`,
+`RELEASE_NOTES.md` (from `docs/releases/v0.1.0-beta.2.md`) and `CHANGELOG.md`. The repository changelog
+keeps beta.2 marked **Unreleased** until publication is separately approved, then records the
+release date. Documentation and inactive workflow-template moves do not change app build inputs;
+record any such differences from the frozen source manifest before tagging. If an approved final
+commit changes build inputs, rebuild and notarize again before publishing that commit's tag.
+
 ## 9. Publish
 
-Done by a maintainer, by hand: create a **draft** GitHub Release for tag `v<package version>`,
+Manual alternative to the approved workflow: create a **draft** GitHub Release for tag `v<package version>`,
 mark it as a pre-release, attach the DMG and `SHA256SUMS.txt`, review, then publish. Write the
 checksum file from inside the bundle directory, so it names the file without a local path:
 
 ```sh
 cd src-tauri/target/release/bundle/dmg
-shasum -a 256 Snipvero_0.1.0-beta.1_aarch64.dmg > SHA256SUMS.txt
+shasum -a 256 Snipvero_0.1.0-beta.2_aarch64.dmg > SHA256SUMS.txt
 shasum -a 256 -c SHA256SUMS.txt
 ```
 
-`LICENSE` and `THIRD_PARTY_NOTICES.txt` travel inside the app (§3) and in the tagged source. If
-the build is not notarized, say so in the release notes, describe Gatekeeper's **Open Anyway**
-step (System Settings → Privacy & Security) and link to the README's Download section; never
-suggest turning off Gatekeeper or removing the quarantine attribute. A public release, and the
+`LICENSE` and `THIRD_PARTY_NOTICES.txt` travel inside the app (§3) and in the tagged source. All new
+releases must pass the distribution gate; the first beta's unnotarized warning is historical only.
+Never suggest turning off Gatekeeper or removing the quarantine attribute. A public release, and the
 README's links to it, need a public repository (changing visibility is the maintainer's
 decision).
+
+## 10. Homebrew Cask integration
+
+There is no published Snipvero cask or tap yet. Apple acceptance does not register one. After a
+**new notarized release is published**, a maintainer may create `ugokkaya/homebrew-tap` and add
+the generated `<output-dir>/dist/snipvero.rb` as `Casks/snipvero.rb`. Do not publish the validation
+cask for `0.1.0-beta.1`: its URL would download the old ad-hoc asset, not the new notarized candidate.
+
+The generated cask uses the final **stapled DMG's** SHA-256 (stapling changes the file), immutable
+versioned GitHub release URL, `app "Snipvero.app"`, `arch: :arm64` and `macos: :sonoma` (14+).
+It never disables Gatekeeper, clears quarantine, resets permissions, or deletes screenshots.
+Beta livecheck is skipped so the stable GitHub latest-release feed cannot silently change channels.
+
+After explicit approval to create/push the tap and a publicly downloadable signed release:
+
+```sh
+brew tap ugokkaya/tap
+brew style --cask ugokkaya/tap/snipvero
+brew audit --cask --online ugokkaya/tap/snipvero
+brew fetch --cask ugokkaya/tap/snipvero
+brew install --cask ugokkaya/tap/snipvero
+```
+
+Test on a clean Apple silicon Mac: install, launch, Screen Recording, capture/copy/save, upgrade,
+and uninstall. Do not use `--no-quarantine` or bypass audit failures. Do not overwrite an existing
+manual installation without backing it up. These online/install/upgrade tests cannot pass until
+the new release URL and tap exist; they have not been claimed as completed.
+
+For later releases, copy the newly generated cask into the tap in a reviewed change, verify the
+public download's checksum against `SHA256SUMS.txt`, audit, then push only with approval. A separate
+tap avoids assuming acceptance into `Homebrew/homebrew-cask`; upstream inclusion also depends on
+[Homebrew's acceptance policy](https://docs.brew.sh/Acceptable-Casks), not just notarization.
