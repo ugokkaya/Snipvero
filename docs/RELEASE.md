@@ -9,7 +9,7 @@ Moving it into the workflows directory and provisioning a runner require separat
 then, it needs `MACOS_SIGNING_ENABLED=true`; manual runs default to artifacts only (`publish=false`).
 No workflow creates certificates or changes repository settings.
 The existing `v0.1.0-beta.1` download remains the original ad-hoc build; do not replace its assets.
-`0.1.0-beta.2`, `0.1.0-beta.3` and `0.1.0-beta.4` are published. The current source version is
+`0.1.0-beta.2` to `0.1.0-beta.5` are published. The current source version is
 `0.1.0-beta.5` (build 5), adding Open at Login (ADR-033). Beta 3 introduced
 in-app updates (ADR-028). Every new candidate must pass Developer ID signing, Apple notarization,
 stapling, Gatekeeper and updater signature verification; the separate updater key is described
@@ -17,11 +17,14 @@ in §6a. The workflow template predates updater packages and must be reviewed fo
 activation. No release step authorises registering a self-hosted runner, moving/dispatching the
 workflow template, enabling `MACOS_SIGNING_ENABLED`, or enabling automatic publication.
 
-Beta 4's eight public release assets were re-downloaded and verified against the candidate,
+Beta 5's eight public release assets were re-downloaded and verified against the candidate,
 including the full distribution/updater gate and byte-identical DMG/updater app custody checks.
-Only afterward were the beta update manifest and Homebrew cask updated. Homebrew installation,
-native website/mail-app opening, clean-Mac quarantine QA and a production beta.3 → beta.4 update
-remain unverified; publishing the release does not claim those manual checks passed.
+Only afterward were the beta update manifest and Homebrew cask updated. Beta 5 is published as the
+repository's latest release (not a GitHub pre-release), like Beta 4 after the maintainer's choice;
+the update channel follows the version, not that flag. The maintainer reported a working in-app
+beta.3 → beta.4 update. Homebrew installation, native website/mail-app opening, clean-Mac
+quarantine QA and the beta.4 → beta.5 update remain unverified; publishing the release does not
+claim those manual checks passed.
 
 ## 1. Version
 
