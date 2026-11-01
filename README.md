@@ -32,7 +32,7 @@ check for updates.
 ## Screenshots
 
 <p align="center">
-  <img src="docs/screenshots/main-window.png" width="503" alt="The Snipvero window: Capture Region button with its shortcut, feature overview, menu bar, Screen Recording and shortcut status, and links to About and GitHub">
+  <img src="docs/screenshots/main-window.png" width="504" alt="The Snipvero window: Capture Region button with its shortcut, feature overview, menu bar and Screen Recording status, global shortcut with Change and Reset buttons, Check for Updates, and links to About, snipvero.app and GitHub">
 </p>
 <p align="center"><em>The Snipvero window: start a capture and check permission and shortcut status.</em></p>
 
