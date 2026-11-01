@@ -654,3 +654,29 @@ privileges`), and Snipvero never sees a password. After a successful install the
   modified app, another key's signature and a mismatched manifest, and rejected the test build
   itself. Not verified yet: the About window flows in the running app, the administrator prompt,
   restart after install, and an update between two published releases.
+
+## ADR-029: Common Controls v6 manifest in Windows test executables
+
+- **Status:** implemented (2026-11-01); macOS checks run locally, Windows CI verification pending.
+- **Context:** updater PR #2 introduced tests using Tauri's MockRuntime. Windows CI run
+  `41300382553` compiled the test program but it exited before any test with
+  `0xc0000139` (`STATUS_ENTRYPOINT_NOT_FOUND`). Tauri's upstream issue
+  [#13419](https://github.com/tauri-apps/tauri/issues/13419) documents this exact failure:
+  MockRuntime links the Common Controls v6 API `TaskDialogIndirect`, while a test executable
+  without an assembly manifest resolves the legacy `comctl32.dll`, which lacks that export.
+  The installed tauri-build 2.7.4 / tauri-winres 0.3.7 sources confirm that the manifest resource
+  is linked only into app binaries, not the library unit-test executable. The failing Snipvero
+  executable's imports have not been inspected directly; upstream diagnosis is the basis for
+  this fix and a successful Windows CI run is still required.
+- **Decision:** on Windows/MSVC targets only, `build.rs` disables tauri-build's app-manifest
+  resource and embeds the equivalent Common Controls v6 manifest through unscoped
+  `/MANIFEST:EMBED` and `/MANIFESTINPUT` linker flags. These cover the app and the lib unit-test
+  executable; `rustc-link-arg-tests` alone would not cover lib unit tests. `/WX` fails on linker
+  warnings rather than accepting a skipped/conflicting manifest. The target is determined from
+  Cargo's target environment, not the build host. Other targets keep Tauri's default build path.
+- **Scope:** no new dependencies, test exclusions, runner configuration, privileges or Windows
+  release support. The XML matches tauri-build 2.7.4's minimal default dependency; icon/version
+  resources still come from Tauri. Do not disable Common Controls support to hide the failure.
+- **Verification:** a manifest-policy test checks the v6 dependency and absence of elevation or
+  compatibility changes; the existing real-plugin MockRuntime tests are the Windows loader
+  regression test. Windows packaging remains a CI smoke test, not a Windows runtime-support claim.

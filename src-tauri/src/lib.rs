@@ -255,4 +255,25 @@ mod tests {
             assert!(!is_apple_version(invalid), "{invalid}");
         }
     }
+
+    /// Keep the dependency identical to tauri-build 2.7.4's default manifest. Embedding it into
+    /// unit-test executables is necessary for the real MockRuntime updater tests to start on
+    /// Windows; those tests also serve as the loader regression test on CI.
+    #[test]
+    fn windows_manifest_requests_common_controls_v6_only() {
+        let manifest = include_str!("../windows-app-manifest.xml");
+        assert!(manifest.contains("name=\"Microsoft.Windows.Common-Controls\""));
+        assert!(manifest.contains("version=\"6.0.0.0\""));
+        assert!(manifest.contains("publicKeyToken=\"6595b64144ccf1df\""));
+        assert_eq!(manifest.matches("<dependency>").count(), 1);
+        // No elevation, compatibility or DPI-policy change is part of this test-loader fix.
+        for unexpected in [
+            "trustInfo",
+            "compatibility",
+            "application",
+            "requestedExecutionLevel",
+        ] {
+            assert!(!manifest.contains(unexpected), "{unexpected}");
+        }
+    }
 }
