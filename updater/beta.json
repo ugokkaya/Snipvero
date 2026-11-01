@@ -1,11 +1,11 @@
 {
-  "version": "0.1.0-beta.4",
-  "notes": "This beta lets you choose and save your capture shortcut from the main window. It also adds links to the official Snipvero website and support email, while keeping screenshots local and update checks strictly user-initiated.\n\nFull release notes: https://github.com/ugokkaya/Snipvero/releases/tag/v0.1.0-beta.4",
-  "pub_date": "2026-11-01T19:15:16Z",
+  "version": "0.1.0-beta.5",
+  "notes": "This beta adds Open at Login, so the capture shortcut works as soon as you log in. Snipvero then starts quietly in the menu bar, without opening its window.\n\nFull release notes: https://github.com/ugokkaya/Snipvero/releases/tag/v0.1.0-beta.5",
+  "pub_date": "2026-11-01T20:05:44Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSZjFuUnFqbXRHOUhjTzlvZWlvOW02RVY3S0Y4SUluYmluMkVUNXlzZEFPMjIzdEY4VWExV1hnMVgxb0Jzc0VmSzd6cmpvQm5PdmxqYmNzaUF6bUd0TCtMYTB2RGN1bndBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNTYwNTE2CWZpbGU6U25pcHZlcm9fMC4xLjAtYmV0YS40X2FhcmNoNjQuYXBwLnRhci5negl2ZXJzaW9uOjAuMS4wLWJldGEuNApQZkdwT0RKR3ZNVWlrL1gxQmN5NTVXbzdSUGp3RkJNVVBsK0p4b1NIdUdNRWlhbHBJV0dGMGxidmFWZitHZm1ZS3BZbURvWitzbko1eW4zSTVhOTJCZz09Cg==",
-      "url": "https://github.com/ugokkaya/Snipvero/releases/download/v0.1.0-beta.4/Snipvero_0.1.0-beta.4_aarch64.app.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSZjFuUnFqbXRHOUVNYWJoRUQ3Q3dLQVBOWjUyNy85MStvRk50VFI5OUQzcW1kUURIUlA3Z0c1NGVRMEJGVzJzN0pUK3RuZ2xGN2tCaUxrVVJ1OElEZlNJMGVmWEtacUFjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNTYzNTQ0CWZpbGU6U25pcHZlcm9fMC4xLjAtYmV0YS41X2FhcmNoNjQuYXBwLnRhci5negl2ZXJzaW9uOjAuMS4wLWJldGEuNQpyLzNGLzM5MFMyV2NLcm9XcW0zWjR2RTE1WFRDdlFJRkFKendMV0RraDZ3VUJqditkZm00N0xVdG1SWkZ4VURnaDhsRVJQUGlZVWtmbVdCdUhTcytCZz09Cg==",
+      "url": "https://github.com/ugokkaya/Snipvero/releases/download/v0.1.0-beta.5/Snipvero_0.1.0-beta.5_aarch64.app.tar.gz"
     }
   }
 }
