@@ -3,7 +3,8 @@
 Snipvero is a free, open-source screenshot tool for the Mac. It sits in the menu bar until you
 need it: press a shortcut, the screen freezes, and you drag out the part you want. Point at things
 with arrows, frame them with rectangles, add a note, then copy the result or save it as a PNG.
-Everything happens on your computer. Snipvero never connects to the internet.
+Everything happens on your computer. Snipvero connects to the internet only when you ask it to
+check for updates.
 
 > **Status: beta (0.1.0-beta.2).** macOS on Apple silicon is the only supported platform. See
 > [Download](#download) and [Known limitations](#known-limitations).
@@ -67,6 +68,18 @@ later on a Mac with Apple silicon (M1 or later).
 notarization tickets. The release is for Apple silicon only; no Intel or universal download is
 provided. Users upgrading from Beta 1 may need to grant Screen Recording permission again because
 the signing identity has changed.
+
+### Updates
+
+Starting with Beta 3, Snipvero can update itself: click **Check for Updates…** in the **Updates**
+row of the Snipvero window, in **About Snipvero**, or in the menu bar menu. Snipvero shows the new version and its release notes, and downloads
+nothing until you click **Download and Restart**. It then verifies the update's signature,
+replaces the app and reopens. Close any open capture first; Snipvero does not update during one.
+If Snipvero sits in a folder you cannot write to, macOS asks for an administrator password in its
+own dialog. Snipvero never checks for updates on its own ([Privacy](#privacy)).
+
+Beta 2 and earlier have no update function. To get updates, install Beta 3 or later once from its
+DMG as above; later versions can then be installed from the About window.
 
 ### Older Beta 1 download
 
@@ -169,10 +182,16 @@ so; **Capture** in the menu bar still works. Changing the shortcut is not availa
 
 ## Privacy
 
-- Snipvero has no network code: no accounts, uploads, analytics, crash reporting or update checks.
-  The macOS and Windows builds contain no HTTP client, and the app's content security policy only
-  allows its own local resources. The GitHub links in the app open the project page in your
-  browser, and only when you click them.
+- No accounts, uploads, analytics or crash reporting. Screenshots, annotations and file names
+  never leave your Mac.
+- The only network access is **Check for Updates…**, and only when you click it; Snipvero never checks at launch or in the background. It asks GitHub over HTTPS for a small
+  file describing the newest beta (`raw.githubusercontent.com`) and, if you choose **Download and
+  Restart**, downloads the update from the GitHub release (`github.com`, which hands the download
+  to `release-assets.githubusercontent.com`). The requests contain no version number, identifier
+  or cookie; like any web request, they show GitHub your IP address, the time, and the updater's
+  User-Agent (`tauri-plugin-updater/<version>`). GitHub's privacy statement applies to that data.
+- The app's content security policy only allows its own local resources. The GitHub links in the
+  app open the project page in your browser, and only when you click them.
 - Screenshots are processed on your Mac and stay in memory; they are discarded when a capture
   ends. Nothing is written to disk unless you save a file, and then only the file you choose.
 - Copying puts the image on the system clipboard, where other apps can read it, as with any copy.

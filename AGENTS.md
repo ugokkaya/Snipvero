@@ -51,8 +51,9 @@ tccutil reset ScreenCapture com.snipvero.app                                    
   `#[cfg(target_os = "...")]` modules (`macos.rs` / `windows.rs`), and only where it is truly needed.
   Shared code must not import platform modules directly.
 - **MVP first.** No abstraction without a second real use. No speculative features.
-- **Privacy:** no network access, no telemetry, no uploads. Screenshots stay in memory until the user
-  copies or saves them. Never add an HTTP client or analytics dependency.
+- **Privacy:** no telemetry, no uploads. The only network access is the update check the user starts
+  (Check for Updates…, ADR-028); never add another network path, HTTP client or analytics
+  dependency. Screenshots stay in memory until the user copies or saves them.
 - **Dependencies:** minimise them. Every new dependency needs an MIT-compatible license
   (MIT, Apache-2.0, BSD, ISC, Zlib, MPL-2.0 for unmodified use) and a one-line justification in the PR / DECISIONS.md.
 - **HiDPI:** keep coordinate math in one pure, tested module. Never assume a single scale factor.

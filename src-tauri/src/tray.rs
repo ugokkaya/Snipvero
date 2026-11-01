@@ -22,6 +22,7 @@ pub enum TrayAction {
     Capture,
     Open,
     About,
+    CheckForUpdates,
     Exit,
 }
 
@@ -32,20 +33,22 @@ enum Entry {
     Separator,
 }
 
-/// Everyday actions first; About sits with Quit, as in the app menu of a Mac app.
-const MENU: [Entry; 5] = [
+/// Everyday actions first; About and updates sit with Quit, as in the app menu of a Mac app.
+const MENU: [Entry; 6] = [
     Entry::Item(TrayAction::Capture),
     Entry::Item(TrayAction::Open),
     Entry::Separator,
     Entry::Item(TrayAction::About),
+    Entry::Item(TrayAction::CheckForUpdates),
     Entry::Item(TrayAction::Exit),
 ];
 
 impl TrayAction {
-    const ALL: [TrayAction; 4] = [
+    const ALL: [TrayAction; 5] = [
         TrayAction::Capture,
         TrayAction::Open,
         TrayAction::About,
+        TrayAction::CheckForUpdates,
         TrayAction::Exit,
     ];
 
@@ -54,6 +57,7 @@ impl TrayAction {
             TrayAction::Capture => "capture",
             TrayAction::Open => "open",
             TrayAction::About => "about",
+            TrayAction::CheckForUpdates => "check-for-updates",
             TrayAction::Exit => "exit",
         }
     }
@@ -67,6 +71,7 @@ impl TrayAction {
             TrayAction::Capture => "Capture",
             TrayAction::Open => "Open Snipvero",
             TrayAction::About => "About Snipvero",
+            TrayAction::CheckForUpdates => "Check for Updates…",
             TrayAction::Exit => EXIT_LABEL,
         }
     }
@@ -164,6 +169,7 @@ mod tests {
                 "Open Snipvero",
                 "---",
                 "About Snipvero",
+                "Check for Updates…",
                 EXIT_LABEL
             ]
         );

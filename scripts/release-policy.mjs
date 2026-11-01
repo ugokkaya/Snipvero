@@ -31,6 +31,8 @@ export function caskFor(version, sha256) {
     skip "Beta channel: updated after a verified release"
   end
 
+  auto_updates true
+
   depends_on arch: :arm64
   depends_on macos: :sonoma
 

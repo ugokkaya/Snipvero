@@ -150,6 +150,17 @@ impl CaptureState {
         self.busy.load(Ordering::Acquire)
     }
 
+    /// Takes the capture lock for an update install, so no capture can start until the app
+    /// restarts (or `release_update` after a failed install). False while a capture is open.
+    pub fn reserve_for_update(&self) -> bool {
+        self.try_begin()
+    }
+
+    /// Gives the capture lock back after a failed install; no capture exists while it is held.
+    pub fn release_update(&self) {
+        self.abort();
+    }
+
     pub fn session(&self) -> MutexGuard<'_, Option<Session>> {
         self.session.lock().unwrap_or_else(|e| e.into_inner())
     }
@@ -756,6 +767,22 @@ mod tests {
         // The export finishing afterwards finds no session and closes nothing again.
         assert!(!state.end_export(1));
         assert_eq!(state.end(1), None);
+    }
+
+    #[test]
+    fn an_update_install_and_a_capture_exclude_each_other() {
+        let state = CaptureState::default();
+        // An open capture (including its export) refuses the install.
+        assert!(state.try_begin());
+        *state.session() = Some(session());
+        assert!(!state.reserve_for_update());
+        assert_eq!(state.end(1), Some(None));
+        // An install in progress refuses a capture until it fails and gives the lock back.
+        assert!(state.reserve_for_update());
+        assert!(!state.try_begin());
+        state.release_update();
+        assert!(!state.is_busy());
+        assert!(state.try_begin());
     }
 
     #[test]

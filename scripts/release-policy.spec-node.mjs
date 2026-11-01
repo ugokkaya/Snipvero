@@ -28,6 +28,8 @@ test("cask pins the final checksum and supported platform, without security bypa
   assert.ok(cask.includes("arch: :arm64"));
   assert.ok(cask.includes("macos: :sonoma"));
   assert.ok(cask.includes('app "Snipvero.app"'));
+  // The app can update itself from its About window (ADR-028).
+  assert.ok(cask.includes("auto_updates true"));
   assert.doesNotMatch(cask, /no_check|quarantine|xattr|system_command/);
   assert.throws(() => caskFor('1.0.0"\nsystem "bad"', sha));
   assert.throws(() => caskFor("0.1.0", "not-a-checksum"));

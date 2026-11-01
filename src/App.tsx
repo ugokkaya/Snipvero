@@ -21,6 +21,7 @@ import {
   type AppStatus,
 } from "./ipc";
 import { detectPlatform, shortcutLabel } from "./platform";
+import { UpdatesRow } from "./Updates";
 import { useAppInfo } from "./useAppInfo";
 import { useFitWindow } from "./useFitWindow";
 
@@ -201,6 +202,8 @@ export function App() {
               )}
             </StatusRow>
           )}
+
+          <UpdatesRow current={info?.version} />
         </ul>
       </main>
 

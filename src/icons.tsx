@@ -33,6 +33,10 @@ export const MenuBarIcon = () =>
 export const ShieldIcon = () =>
   icon(<path d="M8 2 3 4v3.5c0 3 2.1 5.4 5 6.5 2.9-1.1 5-3.5 5-6.5V4z" />);
 
+/** A circular arrow around a downward arrow: updates. */
+export const UpdateIcon = () =>
+  icon(<path d="M13.5 8A5.5 5.5 0 1 1 11.5 3.8M13.5 2.5v2.5H11M8 5.5v5M6 8.5l2 2 2-2" />);
+
 export const KeyboardIcon = () =>
   icon(
     <>

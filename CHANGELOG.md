@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.1.0-beta.3 — Unreleased
+
+### Added
+
+- In-app updates from **Check for Updates…** (main window Updates row, About Snipvero, menu bar),
+  using Tauri's official updater.
+  Checks run only when the user clicks; downloading and installing only after **Download and
+  Restart**. Progress, cancel, up-to-date and failure states are shown.
+- Updates must carry a valid signature from the release updater key, bound to the announced
+  version; only strictly newer Apple silicon builds are offered. No update during a capture.
+
+### Privacy
+
+- The app now makes network requests, but only for a user-started update check and download,
+  to GitHub over HTTPS, without identifiers. Requirements, README and decisions (ADR-028) updated.
+
+### Distribution
+
+- The release script builds, signs and verifies an updater package from the stapled app and
+  writes the beta channel manifest (`updater/beta.json`, published after the release).
+- Beta 2 and earlier have no updater: Beta 3 must be installed manually once.
+
 ## 0.1.0-beta.2 — 2026-11-01
 
 ### Security

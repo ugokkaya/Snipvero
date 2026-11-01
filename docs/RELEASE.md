@@ -9,30 +9,34 @@ Moving it into the workflows directory and provisioning a runner require separat
 then, it needs `MACOS_SIGNING_ENABLED=true`; manual runs default to artifacts only (`publish=false`).
 No workflow creates certificates or changes repository settings.
 The existing `v0.1.0-beta.1` download remains the original ad-hoc build; do not replace its assets.
-The current release source version is `0.1.0-beta.2`, signed and notarized locally. Publishing this
-release does not authorise registering a self-hosted runner, moving/dispatching the workflow
-template, enabling `MACOS_SIGNING_ENABLED`, or enabling automatic publication.
+`0.1.0-beta.2` is published. The current source version is `0.1.0-beta.3`, the first with in-app
+updates (ADR-028); it is not built for release, and the updater key it needs does not exist yet
+(§6a). The workflow template predates updater packages and must be reviewed for them before any
+activation. No release step authorises registering a self-hosted runner, moving/dispatching the
+workflow template, enabling `MACOS_SIGNING_ENABLED`, or enabling automatic publication.
 
 ## 1. Version
 
 There are two version numbers, because Apple's bundle fields accept integers only (ADR-022).
 
-**Package version** `0.1.0-beta.2` (SemVer pre-release). It lives in three manifests, and
+**Package version** `0.1.0-beta.3` (SemVer pre-release, never with `+build` metadata: the updater
+ignores it when ordering versions, so a rebuild needs a new version). It lives in three manifests, and
 `manifest_versions_match` (Rust test) fails if they differ:
 
 - `package.json` → `version`
 - `src-tauri/Cargo.toml` → `version` (then run `cargo check` so `Cargo.lock` follows)
 - `src-tauri/tauri.conf.json` → `version`
 
-It names the Git tag (`v0.1.0-beta.2`), the DMG (`Snipvero_0.1.0-beta.2_aarch64.dmg`), the
-Windows installer and the GitHub Release.
+It names the Git tag (`v0.1.0-beta.3`), the DMG (`Snipvero_0.1.0-beta.3_aarch64.dmg`), the
+updater package (`Snipvero_0.1.0-beta.3_aarch64.app.tar.gz`), the Windows installer and the GitHub
+Release. A pre-release version selects the beta update channel (§9).
 
 **Bundle versions** in the app's `Info.plist`, both one to three period-separated integers:
 
 | Key                          | Value   | Set in                                                     |
 | ---------------------------- | ------- | ---------------------------------------------------------- |
 | `CFBundleShortVersionString` | `0.1.0` | `src-tauri/Info.plist` (overrides the bundler's value)     |
-| `CFBundleVersion`            | `2`     | `tauri.conf.json` → `bundle.macOS.bundleVersion` (a build) |
+| `CFBundleVersion`            | `3`     | `tauri.conf.json` → `bundle.macOS.bundleVersion` (a build) |
 
 `CFBundleShortVersionString` is the package version without its pre-release suffix;
 `bundle_versions_follow_apple_format` (Rust test) fails if it differs or if either value is not in
@@ -276,6 +280,52 @@ Self-hosted job work directories are retained for diagnosis; submission IDs/resu
 not in uploaded artifacts. Clean old run directories manually after review; never delete the local
 Keychain. Rotate credentials if the machine or a trusted dependency is compromised.
 
+## 6a. Updater signing key (ADR-028)
+
+In-app updates are verified with a **minisign (Ed25519) key**, unrelated to the Apple Developer ID
+certificate. Apple's signature lets macOS trust the app; the updater key lets the installed app
+trust an update package. Both are needed. Only the public key is embedded in the app
+(`plugins.updater.pubkey` in `tauri.conf.json`).
+
+**Status:** generated on 2026-11-01 by the maintainer on the signing Mac. Key ID
+**`F4466B8E6A74D65F`**; its public key is in `tauri.conf.json`. The private key is
+`~/.tauri/snipvero-updater.key` (encrypted, mode 0600) and its password the login Keychain item
+`snipvero-updater-key`. A build with an empty `pubkey` shows "Updates are not available in this
+build", and `pnpm notarize:macos` and `pnpm verify:macos --distribution` refuse it.
+
+Generation (on the signing Mac, in Terminal, never in a chat or script log). Run it from the
+repository root: `pnpm tauri` uses the repository's Tauri CLI, and in another folder pnpm may
+install that folder's own dependencies first:
+
+```sh
+cd ~/Projeler/Snipvero   # the repository root
+mkdir -m 700 -p ~/.tauri
+pnpm tauri signer generate -w ~/.tauri/snipvero-updater.key   # asks for a strong password
+chmod 600 ~/.tauri/snipvero-updater.key
+security add-generic-password -s snipvero-updater-key -a "$USER" -w   # asks for the same password
+cat ~/.tauri/snipvero-updater.key.pub                          # public key: into tauri.conf.json
+```
+
+- **Storage:** the key file is encrypted with the password (scrypt). Keep the file in
+  `~/.tauri/` (mode 0600), the password in the login Keychain item `snipvero-updater-key`, and two
+  offline backups of the encrypted file (for example an encrypted external disk and a password
+  manager attachment), with the password stored separately from them. The key ID is recorded
+  above; a package's `.sig` names the key that made it.
+- **Never** in the repository, GitHub secrets, an artifact, a log, a chat, the command line, or
+  the environment of `tauri build`. `createUpdaterArtifacts` stays unset, so builds never need it.
+  The release script reads only `TAURI_SIGNING_PRIVATE_KEY_PATH` (an absolute path outside the
+  repository) and refuses `TAURI_SIGNING_PRIVATE_KEY` (key content); it takes the password from the
+  Keychain item (or `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`) and passes it only to the signer process.
+- **Loss:** installed copies can no longer be updated. Publish a release with a new key's public
+  key; users must install it manually once, like the first updater release. Document it in the
+  release notes.
+- **Rotation:** ship a release signed with the old key that embeds the new public key; from then
+  on sign with the new key. Keep the old key until no supported version needs it.
+- **Compromise:** a stolen key alone cannot reach users, because the manifest is served from this
+  repository; with repository write access it could. Rotate immediately as above, review the
+  manifest history, and tell users to install the fixed release manually if a malicious manifest
+  was ever published.
+
 ## 7. Notarization (requirements)
 
 Tauri submits the signed `.app` to Apple's notary service and staples the ticket (before it builds
@@ -338,9 +388,17 @@ APPLE_TEAM_ID=TEAMID1234 NOTARY_KEYCHAIN_PROFILE=snipvero-notary \
   --output-dir src-tauri/target/release-candidates/unique-candidate-name
 ```
 
-Set `APPLE_SIGNING_IDENTITY` in the environment for both commands. The output directory's parent
+Set `APPLE_SIGNING_IDENTITY` in the environment for both commands, and for the second also
+`TAURI_SIGNING_PRIVATE_KEY_PATH=$HOME/.tauri/snipvero-updater.key` (§6a). The output directory's parent
 must exist; the candidate directory itself must not exist (no overwrites). The script preserves
 the input app, notarizes a copy and exports only verified public files into `<output-dir>/dist/`.
+
+After the app ticket is stapled, and before the DMG is made, the script builds the updater
+package from that stapled app (`tar` without AppleDouble files or extended attributes), signs it
+with `tauri signer sign --app-version <version>`, verifies the signature and its signed version
+against the public key in `tauri.conf.json`, and writes the manifest from
+`docs/releases/v<version>.md` (its summary as plain text plus a link). It checks the updater
+configuration and key before submitting anything to Apple.
 Submission IDs and results remain in `<output-dir>` for timeout/rejection diagnosis. This command
 never creates, uploads or publishes a GitHub Release. Its DMG has a simple app + Applications
 layout created by `hdiutil`, without Finder AppleScript/Automation permission.
@@ -371,6 +429,13 @@ It checks:
   read-only and holds only `Snipvero.app` and an `Applications` link to `/Applications`; the app
   inside passes the same checks and has the identical executable and `Info.plist`. With
   `--distribution`: the DMG's Developer ID signature, stapled ticket and Gatekeeper assessment.
+- The embedded updater configuration: the channel's endpoint, no local `http://127.0.0.1` test
+  endpoint, and with `--distribution` the release public key.
+- With `--updater`: the updater package in `<bundle-dir>/updater/`, its signature (configured key,
+  signed for this version), its manifest (one `darwin-aarch64` entry at the versioned release
+  asset, the same signature), entries only under `Snipvero.app/` without AppleDouble files; the
+  extracted app passes every app check and is byte-identical to the verified app, including
+  modes and links.
 - It prints the DMG's SHA-256 for the release notes.
 
 Then on a Mac that has never run Snipvero: download the DMG through a browser (so it is
@@ -396,7 +461,8 @@ executable and Info.plist hashes, Apple bundle version/build number, signing Tea
 architecture. Keep provenance and verification logs beside the candidate, not inside the signed
 app. These checks document source-to-package custody; they are not a reproducible-build guarantee.
 
-The final `notarized/dist/` directory contains the DMG, `SHA256SUMS.txt`, notices, `snipvero.rb`,
+The final `notarized/dist/` directory contains the DMG, the updater package and its `.sig`,
+`SHA256SUMS.txt` (DMG and package), notices, `snipvero.rb`,
 `RELEASE_NOTES.md` (from `docs/releases/v0.1.0-beta.2.md`) and `CHANGELOG.md`. The repository changelog
 keeps beta.2 marked **Unreleased** until publication is separately approved, then records the
 release date. Documentation and inactive workflow-template moves do not change app build inputs;
@@ -406,7 +472,27 @@ commit changes build inputs, rebuild and notarize again before publishing that c
 ## 9. Publish
 
 Manual alternative to the approved workflow: create a **draft** GitHub Release for tag `v<package version>`,
-mark it as a pre-release, attach the DMG and `SHA256SUMS.txt`, review, then publish. Write the
+mark it as a pre-release, attach the DMG, the updater package with its `.sig` and
+`SHA256SUMS.txt`, review, then publish.
+
+### Update manifest (after the release is public)
+
+Installed apps read `updater/beta.json` from `main` (`raw.githubusercontent.com`; the stable
+channel would use `updater/stable.json`). The order makes a failed or partial publication
+harmless: until the last step, apps keep seeing the previous manifest.
+
+1. Publish the release with all assets (above). Do not touch the manifest yet.
+2. Download the DMG, package and `.sig` anonymously from their public URLs, compare them with
+   `SHA256SUMS.txt` and the candidate, and run `pnpm verify:macos --distribution --team-id <TEAM>
+--updater` against a bundle directory holding the downloaded files.
+3. Copy `<output-dir>/manifest/beta.json` to `updater/beta.json` in one commit, alone, and push it
+   to `main` (with approval). Its URL points only at this release's versioned asset.
+4. Fetch `https://raw.githubusercontent.com/ugokkaya/Snipvero/main/updater/beta.json` (it may take
+   about five minutes to refresh) and compare it with the committed file.
+
+Never delete or replace an asset a published manifest points to. To withdraw a broken update,
+revert the manifest commit (apps then see the previous version as current) and publish a fixed,
+higher version. A manifest is never edited to point at an older version: the app would ignore it. Write the
 checksum file from inside the bundle directory, so it names the file without a local path:
 
 ```sh
@@ -430,7 +516,8 @@ cask for `0.1.0-beta.1`: its URL would download the old ad-hoc asset, not the ne
 
 The generated cask uses the final **stapled DMG's** SHA-256 (stapling changes the file), immutable
 versioned GitHub release URL, `app "Snipvero.app"`, `arch: :arm64` and `macos: :sonoma` (14+).
-It never disables Gatekeeper, clears quarantine, resets permissions, or deletes screenshots.
+It declares `auto_updates true`, because the app can update itself (ADR-028). It never disables
+Gatekeeper, clears quarantine, resets permissions, or deletes screenshots.
 Beta livecheck is skipped so the stable GitHub latest-release feed cannot silently change channels.
 
 After explicit approval to create/push the tap and a publicly downloadable signed release:
@@ -452,3 +539,57 @@ For later releases, copy the newly generated cask into the tap in a reviewed cha
 public download's checksum against `SHA256SUMS.txt`, audit, then push only with approval. A separate
 tap avoids assuming acceptance into `Homebrew/homebrew-cask`; upstream inclusion also depends on
 [Homebrew's acceptance policy](https://docs.brew.sh/Acceptable-Casks), not just notarization.
+
+## 11. Local updater test (macOS)
+
+`scripts/updater-local-test.mjs` tests the real update path end to end without the internet, the
+release key or the release endpoint. It builds two versions (`0.1.0-beta.3` installed,
+`0.1.0-beta.90` offered) as **Snipvero Update Test** (`com.snipvero.updatetest`), so the installed
+Snipvero, its settings and its Screen Recording grant are untouched. Their updater endpoint is
+`http://127.0.0.1:8765/beta.json` with the plugin's insecure-transport setting and a throwaway
+key, which only test builds may use; `pnpm verify:macos` rejects such a build.
+
+Run the commands from the repository root (the script path is relative to it):
+
+```sh
+# Optional: a stable local signature keeps a Screen Recording grant across the update (ADR-011).
+APPLE_SIGNING_IDENTITY="Snipvero Local Development" \
+  node scripts/updater-local-test.mjs prepare --dir /tmp/snipvero-update-test
+node scripts/updater-local-test.mjs serve --dir /tmp/snipvero-update-test --scenario newer [--slow]
+open "/tmp/snipvero-update-test/Applications/Snipvero Update Test.app"   # Updates row in its window
+```
+
+Nothing happens until **Check for Updates…** (or **Check Again** / **Try Again**) is clicked in
+the main window's Updates row, the About window or the menu bar menu: opening the app never
+checks. Try each entry point once; the menu bar item must show the main window and start the
+check in its row. Switch scenarios by typing a name (and ` slow`)
+into the running `serve`; `offline` drops every connection. The server logs each request's path,
+User-Agent and scenario: one `GET /beta.json` per check, then one `GET /packages/…` per download. Quit the regular Snipvero first, so the two menu bar icons and shortcuts are not
+confused.
+
+| Scenario / setup                                                      | Expected                                                                        |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `newer`                                                               | Offer for 0.1.0-beta.90 with notes; Download and Restart installs and reopens   |
+| `newer --slow`, then Cancel                                           | Progress, then back to the offer; app unchanged                                 |
+| `newer --slow`, start a capture during the download                   | "Finish or cancel the current capture"; app unchanged; Try Again installs later |
+| `same`, `older`                                                       | "is up to date"                                                                 |
+| `wrong-arch`                                                          | "not available for your Mac"                                                    |
+| `other-key`, `wrong-version`, `corrupted`                             | "could not be verified, so it was not installed"; app unchanged                 |
+| `malformed`                                                           | "could not be read"                                                             |
+| `server-error`, or no server running                                  | "could not reach the update server"                                             |
+| `newer` with `chmod a-w .../Applications`, cancel the macOS prompt    | macOS administrator prompt; "could not be installed"; app unchanged and running |
+| `newer` launched from a mounted DMG or a copy Gatekeeper translocated | "Move Snipvero to the Applications folder"                                      |
+| After the update                                                      | About shows 0.1.0-beta.90; capture, copy and save work                          |
+
+The bundle swap itself also runs without the UI, on a copy of the installed test build (a
+corrupted package must leave it untouched, the genuine one must replace it with a valid signed
+app):
+
+```sh
+(cd src-tauri && SNIPVERO_UPDATE_TEST_DIR=/tmp/snipvero-update-test cargo test -- --ignored real_install)
+```
+
+Afterwards: `chmod u+w` the folder if changed, quit the test app, delete the test directory, and
+remove a test grant with `tccutil reset ScreenCapture com.snipvero.updatetest`. The first real
+update between two published releases still has to be checked separately (Screen Recording
+grant kept, Gatekeeper silent on the replaced app).

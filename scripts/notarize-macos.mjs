@@ -1,11 +1,30 @@
 // Consumes an already Developer ID-signed app. Never rebuilds/re-signs it, exports keys or
 // creates a release. Public artifacts appear in dist/ only after the complete distribution gate.
+// The updater package (ADR-028) is made from the stapled app and signed with the separate updater
+// key, whose password comes from the login Keychain and reaches only the signing process.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { caskFor, requireAccepted, requireSigningConfig } from "./release-policy.mjs";
+import {
+  channelFor,
+  manifestFor,
+  notesFromRelease,
+  packageName,
+  requireUpdaterConfig,
+  requireUpdaterKeyPath,
+  verifySignature,
+} from "./updater.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -17,9 +36,10 @@ const option = (name) => {
   return resolve(args[i + 1]);
 };
 
-function run(command, commandArgs, capture = false) {
+function run(command, commandArgs, capture = false, env = process.env) {
   const result = spawnSync(command, commandArgs, {
     cwd: root,
+    env,
     encoding: "utf8",
     stdio: capture ? "pipe" : "inherit",
     maxBuffer: 16 * 1024 * 1024,
@@ -46,6 +66,14 @@ function main() {
   const version = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
   caskFor(version, "0".repeat(64));
   if (config.version !== version) throw new Error("Manifest version mismatch");
+  // Updater prerequisites before any submission, so a missing key cannot waste a notarization.
+  const { pubkey } = requireUpdaterConfig(config, version);
+  const keyPath = requireUpdaterKeyPath(process.env, root);
+  if (!existsSync(keyPath) || (statSync(keyPath).mode & 0o077) !== 0) {
+    throw new Error("The updater key file must exist and be readable only by its owner (0600)");
+  }
+  const releaseNotes = join(root, `docs/releases/v${version}.md`);
+  const notes = notesFromRelease(readFileSync(releaseNotes, "utf8"), version);
   run("codesign", ["--verify", "--deep", "--strict", app]);
   // codesign writes signature details to stderr.
   const signature = spawnSync("codesign", ["-dv", "--verbose=4", app], { encoding: "utf8" });
@@ -103,6 +131,68 @@ function main() {
   run("ditto", ["-c", "-k", "--keepParent", candidate, zip]);
   notarize(zip, "app");
 
+  // Updater package: the stapled app exactly as notarized, without Finder metadata or extended
+  // attributes, signed for this version. Never made before stapling (the ticket is part of it).
+  const updater = join(bundle, "updater");
+  mkdirSync(updater);
+  const updaterPackage = join(updater, packageName(version));
+  run(
+    "tar",
+    [
+      "--no-mac-metadata",
+      "--no-xattrs",
+      "-czf",
+      updaterPackage,
+      "-C",
+      join(bundle, "macos"),
+      "Snipvero.app",
+    ],
+    false,
+    { ...process.env, COPYFILE_DISABLE: "1" },
+  );
+  const password =
+    process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD ??
+    run(
+      "security",
+      [
+        "find-generic-password",
+        "-s",
+        process.env.UPDATER_KEY_KEYCHAIN_SERVICE ?? "snipvero-updater-key",
+        "-w",
+      ],
+      true,
+    ).replace(/\n$/, "");
+  run(
+    "pnpm",
+    [
+      "tauri",
+      "signer",
+      "sign",
+      "--private-key-path",
+      keyPath,
+      "--app-version",
+      version,
+      updaterPackage,
+    ],
+    false,
+    { ...process.env, CI: "true", TAURI_SIGNING_PRIVATE_KEY_PASSWORD: password },
+  );
+  const updaterSignature = readFileSync(`${updaterPackage}.sig`, "utf8");
+  verifySignature({
+    data: readFileSync(updaterPackage),
+    signature: updaterSignature,
+    pubkey,
+    version,
+  });
+  const channel = channelFor(version);
+  const manifest = manifestFor({
+    version,
+    notes,
+    signature: updaterSignature,
+    pubDate: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+  });
+  writeFileSync(join(updater, `${channel}.json`), `${JSON.stringify(manifest, null, 2)}\n`);
+
   const stage = join(output, "dmg-stage");
   mkdirSync(stage);
   run("ditto", [candidate, join(stage, "Snipvero.app")]);
@@ -119,16 +209,29 @@ function main() {
     team,
     "--bundle-dir",
     bundle,
+    "--updater",
   ]);
 
   const dist = join(output, "dist");
   mkdirSync(dist);
   copyFileSync(dmg, join(dist, name));
   const sha = createHash("sha256").update(readFileSync(dmg)).digest("hex");
-  writeFileSync(join(dist, "SHA256SUMS.txt"), `${sha}  ${name}\n`);
+  copyFileSync(updaterPackage, join(dist, packageName(version)));
+  copyFileSync(`${updaterPackage}.sig`, join(dist, `${packageName(version)}.sig`));
+  const packageSha = createHash("sha256").update(readFileSync(updaterPackage)).digest("hex");
+  writeFileSync(
+    join(dist, "SHA256SUMS.txt"),
+    `${sha}  ${name}\n${packageSha}  ${packageName(version)}\n`,
+  );
   copyFileSync(join(root, "THIRD_PARTY_NOTICES.txt"), join(dist, "THIRD_PARTY_NOTICES.txt"));
   writeFileSync(join(dist, "snipvero.rb"), caskFor(version, sha));
-  console.log(`Verified distribution files: ${dist}. No release created.`);
+  // Not a release asset: committed as updater/<channel>.json only after the release is public
+  // and its assets re-downloaded and verified (RELEASE.md §9).
+  const manifestDir = join(output, "manifest");
+  mkdirSync(manifestDir);
+  copyFileSync(join(updater, `${channel}.json`), join(manifestDir, `${channel}.json`));
+  console.log(`Verified distribution files: ${dist}. Updater manifest: ${manifestDir}.`);
+  console.log("No release created and no manifest published.");
 }
 
 try {

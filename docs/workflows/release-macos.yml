@@ -1,4 +1,7 @@
 # Inactive reference template. Do not copy into .github/workflows without separate approval.
+# NOTE (ADR-028): this template predates updater packages. `pnpm notarize:macos` now also needs the
+# updater key (RELEASE.md §6a) and produces the .app.tar.gz, its .sig and a manifest, which this
+# template neither provides nor uploads. Review and update it before any activation.
 name: macOS release
 
 on:

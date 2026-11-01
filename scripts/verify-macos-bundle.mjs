@@ -2,11 +2,14 @@
 // file list, architectures, minimum macOS, linked libraries, signature, bundled notices, and that
 // the DMG holds the same app plus an Applications link. macOS only (plutil, codesign, hdiutil).
 //
-//   node scripts/verify-macos-bundle.mjs [--bundle-dir DIR] [--arch arm64|x86_64|universal] [--distribution] [--team-id TEAM]
+//   node scripts/verify-macos-bundle.mjs [--bundle-dir DIR] [--arch arm64|x86_64|universal] [--distribution] [--team-id TEAM] [--updater]
 //
 // --bundle-dir    default src-tauri/target/release/bundle (CI's debug build: .../debug/bundle)
 // --arch          architectures the executable must contain; default arm64
-// --distribution  also require a Developer ID signature, a timestamp, notarization and stapling
+// --distribution  also require a Developer ID signature, a timestamp, notarization and stapling,
+//                 and the updater public key in the executable
+// --updater       also verify DIR/updater: the signed updater package, its signature and manifest,
+//                 and that the package holds exactly the verified app (ADR-028)
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -23,6 +26,13 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  channelFor,
+  endpointFor,
+  packageName,
+  validateManifest,
+  verifySignature,
+} from "./updater.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -34,6 +44,7 @@ const bundleDir = resolve(option("--bundle-dir", join(root, "src-tauri/target/re
 const archOption = option("--arch", "arm64");
 const distribution = args.includes("--distribution");
 const teamId = option("--team-id", "");
+const updater = args.includes("--updater");
 if (args.includes("--team-id") && !/^[A-Z0-9]{10}$/.test(teamId ?? "")) {
   console.error("--team-id requires a 10-character Apple Team ID");
   process.exit(2);
@@ -50,6 +61,9 @@ const packageVersion = JSON.parse(readFileSync(join(root, "package.json"), "utf8
 const tauriConfig = JSON.parse(readFileSync(join(root, "src-tauri/tauri.conf.json"), "utf8"));
 const coreVersion = packageVersion.split(/[-+]/)[0];
 const appleVersion = /^\d+(\.\d+){0,2}$/;
+const channel = channelFor(packageVersion);
+const updaterEndpoint = endpointFor(channel);
+const updaterKey = tauriConfig.plugins?.updater?.pubkey?.trim() ?? "";
 
 let failures = 0;
 const check = (ok, message, detail = "") => {
@@ -173,6 +187,16 @@ function verifyApp(app, label) {
       "links only system libraries",
       foreign.join(", ") || `${new Set(libraries).size} libraries`,
     );
+
+    // The embedded updater configuration: this channel's fixed endpoint, no local http endpoint
+    // (the updater test builds use one, RELEASE.md §11) and, for distribution, the release key.
+    // Setting names cannot be checked here: the plugin's own deserializer contains them.
+    const embedded = readFileSync(binary).toString("latin1");
+    check(embedded.includes(updaterEndpoint), "updater endpoint of the channel", updaterEndpoint);
+    check(!/http:\/\/127\.0\.0\.1[:/]/.test(embedded), "no local updater test endpoint");
+    if (distribution) {
+      check(updaterKey !== "" && embedded.includes(updaterKey), "updater public key embedded");
+    }
   }
 
   const verify = run("codesign", ["--verify", "--deep", "--strict", "--verbose=2", app]);
@@ -336,6 +360,90 @@ function verifyDmg(standalone) {
   info(`SHA-256 ${sha256(dmg)}  ${name}`);
 }
 
+/** Differences between two app trees: entry types, permission bits, link targets and bytes. */
+function treeDifferences(a, b) {
+  const entries = (dir) => readdirSync(dir, { recursive: true }).sort();
+  const left = entries(a);
+  const right = entries(b);
+  if (JSON.stringify(left) !== JSON.stringify(right)) return ["different file lists"];
+  return left.filter((entry) => {
+    const [x, y] = [lstatSync(join(a, entry)), lstatSync(join(b, entry))];
+    if (x.isSymbolicLink() || y.isSymbolicLink()) {
+      return (
+        !(x.isSymbolicLink() && y.isSymbolicLink()) ||
+        readlinkSync(join(a, entry)) !== readlinkSync(join(b, entry))
+      );
+    }
+    if (x.isDirectory() !== y.isDirectory() || (x.mode & 0o7777) !== (y.mode & 0o7777)) return true;
+    return x.isFile() && sha256(join(a, entry)) !== sha256(join(b, entry));
+  });
+}
+
+function verifyUpdater(app) {
+  const dir = join(bundleDir, "updater");
+  const name = packageName(packageVersion);
+  const pkg = join(dir, name);
+  console.log(`\nUpdater package: ${relative(root, pkg)}`);
+  if (!check(existsSync(pkg) && existsSync(`${pkg}.sig`), "package and signature exist")) return;
+  const signature = readFileSync(`${pkg}.sig`, "utf8");
+  let verified;
+  try {
+    verified = verifySignature({
+      data: readFileSync(pkg),
+      signature,
+      pubkey: updaterKey,
+      version: packageVersion,
+    });
+  } catch (error) {
+    verified = `FAILED: ${error.message}`;
+  }
+  check(!verified.startsWith("FAILED"), "signed by the configured key for this version", verified);
+
+  const manifestPath = join(dir, `${channel}.json`);
+  let manifestOk = "";
+  try {
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    validateManifest(manifest, packageVersion);
+    if (manifest.platforms["darwin-aarch64"].signature !== signature.trim()) {
+      throw new Error("manifest signature differs from the package signature");
+    }
+  } catch (error) {
+    manifestOk = error.message;
+  }
+  check(manifestOk === "", `${channel}.json manifest matches the package`, manifestOk);
+
+  const listing = run("tar", ["-tzf", pkg]).stdout.trim().split("\n");
+  const bundleName = `${tauriConfig.productName}.app`;
+  const outside = listing.find(
+    (entry) =>
+      !(entry === bundleName || entry.startsWith(`${bundleName}/`)) ||
+      entry.split("/").includes(".."),
+  );
+  check(
+    outside === undefined,
+    `package holds only ${bundleName}`,
+    outside ?? `${listing.length} entries`,
+  );
+  check(!listing.some((entry) => /(^|\/)\._/.test(entry)), "no AppleDouble files in the package");
+
+  const extracted = mkdtempSync(join(tmpdir(), "snipvero-updater-"));
+  try {
+    const untar = run("tar", ["-xzf", pkg, "-C", extracted]);
+    if (!check(untar.status === 0, "package extracts", untar.stderr.trim())) return;
+    const copy = join(extracted, `${tauriConfig.productName}.app`);
+    verifyApp(copy, "App in updater package");
+    const differences = treeDifferences(app, copy);
+    check(
+      differences.length === 0,
+      "updater app is byte-identical to the verified app (files, modes, links)",
+      differences.slice(0, 5).join(", "),
+    );
+  } finally {
+    rmSync(extracted, { recursive: true, force: true });
+  }
+  info(`SHA-256 ${sha256(pkg)}  ${name}`);
+}
+
 if (process.platform !== "darwin") {
   console.error("verify-macos-bundle runs on macOS only");
   process.exit(2);
@@ -343,7 +451,9 @@ if (process.platform !== "darwin") {
 console.log(
   `Snipvero ${packageVersion} (bundle ${coreVersion} build ${tauriConfig.bundle.macOS.bundleVersion}), ${archOption}${distribution ? ", distribution" : ""}`,
 );
-const standalone = verifyApp(join(bundleDir, "macos", `${tauriConfig.productName}.app`), "App");
+const appPath = join(bundleDir, "macos", `${tauriConfig.productName}.app`);
+const standalone = verifyApp(appPath, "App");
 verifyDmg(standalone);
+if (updater) verifyUpdater(appPath);
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

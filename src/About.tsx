@@ -3,6 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import appIcon from "../src-tauri/icons/128x128@2x.png";
 import { ExternalLink } from "./ExternalLink";
 import { openLink } from "./ipc";
+import { Updates } from "./Updates";
 import { useAppInfo } from "./useAppInfo";
 import { useFitWindow } from "./useFitWindow";
 
@@ -69,6 +70,8 @@ export function About() {
           </dd>
         </div>
       </dl>
+
+      <Updates current={info?.version} />
 
       <p className="about-copyright">{info?.copyright}</p>
     </main>

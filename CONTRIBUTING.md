@@ -40,7 +40,8 @@ checked on one platform should say so.
 
 The full list is in [AGENTS.md](AGENTS.md#engineering-rules). The most important ones:
 
-- **Privacy:** no network access, telemetry, analytics or uploads. Do not add an HTTP client.
+- **Privacy:** no telemetry, analytics or uploads. The only network access is the user-started
+  update check (ADR-028); do not add another network path or HTTP client.
 - **Dependencies:** as few as possible. A new one needs a license from the policy in
   [docs/DECISIONS.md](docs/DECISIONS.md) (ADR-021), a one-line justification in the pull request,
   and a regenerated notices file (`pnpm notices`).
