@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.1.0-beta.5 — 2026-11-01
+
+### Added
+
+- **Open at Login** in the menu bar (off by default). Snipvero then starts with the Mac in the menu
+  bar, without opening its window. It is listed in System Settings › General › Login Items, where
+  it can also be turned off; the menu shows the setting from there.
+
 ## 0.1.0-beta.4 — 2026-11-01
 
 ### Added
