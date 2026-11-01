@@ -4,6 +4,7 @@ mod devtools;
 mod events;
 mod export;
 mod geometry;
+mod login_item;
 mod overlay;
 mod settings;
 mod shortcut;
@@ -80,14 +81,16 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("failed to build Snipvero");
 
-    app.run(|_app, event| {
+    app.run(|app, event| match event {
+        // The main window starts hidden (`tauri.conf.json`). It opens at every launch except one at
+        // login, where Snipvero should only appear in the menu bar (ADR-033). The launch event is
+        // only current while the app finishes launching, which is when `Ready` arrives.
+        RunEvent::Ready if !login_item::launched_at_login() => show_main_window(app),
         // Only an explicit exit (tray "Exit", which passes an exit code) may stop the app.
-        if let RunEvent::ExitRequested {
+        RunEvent::ExitRequested {
             code: None, api, ..
-        } = event
-        {
-            api.prevent_exit();
-        }
+        } => api.prevent_exit(),
+        _ => {}
     });
 }
 
@@ -95,6 +98,12 @@ pub(crate) fn handle_tray_action(app: &AppHandle, action: TrayAction) {
     match action {
         TrayAction::Capture => overlay::start(app),
         TrayAction::Open => show_main_window(app),
+        TrayAction::OpenAtLogin => {
+            if let Err(error) = login_item::set_enabled(!login_item::is_enabled()) {
+                eprintln!("[login item] {error}");
+            }
+            tray::refresh_open_at_login(app);
+        }
         TrayAction::About => about::show(app),
         TrayAction::CheckForUpdates => update::request_check(app),
         TrayAction::Exit => app.exit(0),
@@ -204,6 +213,14 @@ mod tests {
         for label in [MAIN_WINDOW, about::LABEL] {
             assert!(fit.contains(&format!("\"{label}\"")), "{label}");
         }
+    }
+
+    /// Shown at `RunEvent::Ready` unless launched at login (ADR-033), never by the configuration.
+    #[test]
+    fn main_window_starts_hidden() {
+        let config = include_str!("../tauri.conf.json");
+        let main = between(config, "\"label\": \"main\"", "}");
+        assert!(main.contains("\"visible\": false"), "{main}");
     }
 
     /// The version lives in three manifests; a release must not ship with them disagreeing.

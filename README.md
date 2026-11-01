@@ -186,6 +186,10 @@ You can also start a capture with **Capture Region** in the Snipvero window. Clo
 keeps the app running in the menu bar. Choose **Open Snipvero** to show the window again,
 **About Snipvero** for the version and license, or **Quit Snipvero** to quit.
 
+To start Snipvero whenever you log in, choose **Open at Login** in the menu bar (off by default).
+Snipvero then starts in the menu bar without opening its window. It appears in System Settings ›
+General › Login Items, where you can also turn it off.
+
 ### Keyboard shortcuts
 
 | Shortcut                                                       | Action                                                 |
@@ -231,7 +235,7 @@ If another app already uses the shortcut, the Snipvero window says so; choose an
 
 - Beta software. See [Download](#download) for installation requirements and the older Beta 1 warning.
 - A selection stays on one display; it cannot span several displays.
-- Only the capture shortcut can be changed: colours and sizes are fixed, and there is no launch at login.
+- Only the capture shortcut and Open at Login can be changed: colours and sizes are fixed.
 - Unplugging or rearranging displays during a capture ends that capture.
 - Apple silicon only; Intel Macs are untested.
 

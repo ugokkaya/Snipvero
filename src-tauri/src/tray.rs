@@ -1,10 +1,12 @@
 //! Menu bar (macOS) / system tray (Windows) icon and menu.
 
 use tauri::{
-    AppHandle,
-    menu::{Menu, MenuItem, PredefinedMenuItem},
-    tray::TrayIconBuilder,
+    AppHandle, Manager, Wry,
+    menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem},
+    tray::{TrayIconBuilder, TrayIconEvent},
 };
+
+use crate::login_item;
 
 /// Black-and-alpha template image (`icons/source/tray-template.svg`, 18 pt at 2×). macOS tints a
 /// template image itself, so one asset fits light and dark menu bars and tinted states. Windows
@@ -21,6 +23,7 @@ const EXIT_LABEL: &str = "Exit";
 pub enum TrayAction {
     Capture,
     Open,
+    OpenAtLogin,
     About,
     CheckForUpdates,
     Exit,
@@ -33,20 +36,33 @@ enum Entry {
     Separator,
 }
 
-/// Everyday actions first; About and updates sit with Quit, as in the app menu of a Mac app.
-const MENU: [Entry; 6] = [
-    Entry::Item(TrayAction::Capture),
-    Entry::Item(TrayAction::Open),
-    Entry::Separator,
-    Entry::Item(TrayAction::About),
-    Entry::Item(TrayAction::CheckForUpdates),
-    Entry::Item(TrayAction::Exit),
-];
+/// Everyday actions first, then the login setting where the platform has one; About and updates
+/// sit with Quit, as in the app menu of a Mac app.
+fn menu(open_at_login: bool) -> Vec<Entry> {
+    let mut entries = vec![
+        Entry::Item(TrayAction::Capture),
+        Entry::Item(TrayAction::Open),
+        Entry::Separator,
+    ];
+    if open_at_login {
+        entries.extend([Entry::Item(TrayAction::OpenAtLogin), Entry::Separator]);
+    }
+    entries.extend([
+        Entry::Item(TrayAction::About),
+        Entry::Item(TrayAction::CheckForUpdates),
+        Entry::Item(TrayAction::Exit),
+    ]);
+    entries
+}
+
+/// The checkable **Open at Login** item, kept to show the OS's current state (ADR-033).
+struct OpenAtLoginItem(CheckMenuItem<Wry>);
 
 impl TrayAction {
-    const ALL: [TrayAction; 5] = [
+    const ALL: [TrayAction; 6] = [
         TrayAction::Capture,
         TrayAction::Open,
+        TrayAction::OpenAtLogin,
         TrayAction::About,
         TrayAction::CheckForUpdates,
         TrayAction::Exit,
@@ -56,6 +72,7 @@ impl TrayAction {
         match self {
             TrayAction::Capture => "capture",
             TrayAction::Open => "open",
+            TrayAction::OpenAtLogin => "open-at-login",
             TrayAction::About => "about",
             TrayAction::CheckForUpdates => "check-for-updates",
             TrayAction::Exit => "exit",
@@ -70,6 +87,7 @@ impl TrayAction {
         match self {
             TrayAction::Capture => "Capture",
             TrayAction::Open => "Open Snipvero",
+            TrayAction::OpenAtLogin => "Open at Login",
             TrayAction::About => "About Snipvero",
             TrayAction::CheckForUpdates => "Check for Updates…",
             TrayAction::Exit => EXIT_LABEL,
@@ -79,8 +97,20 @@ impl TrayAction {
 
 pub fn create(app: &AppHandle) -> tauri::Result<()> {
     let menu = Menu::new(app)?;
-    for entry in MENU {
+    for entry in self::menu(login_item::SUPPORTED) {
         match entry {
+            Entry::Item(TrayAction::OpenAtLogin) => {
+                let item = CheckMenuItem::with_id(
+                    app,
+                    TrayAction::OpenAtLogin.id(),
+                    TrayAction::OpenAtLogin.label(),
+                    true,
+                    login_item::is_enabled(),
+                    None::<&str>,
+                )?;
+                menu.append(&item)?;
+                app.manage(OpenAtLoginItem(item));
+            }
             Entry::Item(action) => {
                 menu.append(&MenuItem::with_id(
                     app,
@@ -101,6 +131,12 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
             if let Some(action) = TrayAction::from_id(event.id().as_ref()) {
                 crate::handle_tray_action(app, action);
             }
+        })
+        // The user can also change the login item in System Settings; check again on every click.
+        .on_tray_icon_event(|tray, event| {
+            if matches!(event, TrayIconEvent::Click { .. }) {
+                refresh_open_at_login(tray.app_handle());
+            }
         });
     #[cfg(target_os = "macos")]
     match decode_rgba(TEMPLATE_ICON) {
@@ -113,6 +149,15 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     }
     builder.build(app)?;
     Ok(())
+}
+
+/// Shows the OS's current login item state, which a click on the item does not track by itself.
+pub fn refresh_open_at_login(app: &AppHandle) {
+    if let Some(item) = app.try_state::<OpenAtLoginItem>()
+        && let Err(err) = item.0.set_checked(login_item::is_enabled())
+    {
+        eprintln!("[tray] open at login: {err}");
+    }
 }
 
 /// Decodes an 8-bit RGBA PNG with the `png` crate already used for export, rather than enabling
@@ -144,7 +189,17 @@ fn decode_rgba(bytes: &[u8]) -> Result<tauri::image::Image<'static>, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{EXIT_LABEL, Entry, MENU, TEMPLATE_ICON, TrayAction, decode_rgba};
+    use super::{EXIT_LABEL, Entry, TEMPLATE_ICON, TrayAction, decode_rgba, menu};
+
+    fn labels(entries: &[Entry]) -> Vec<&'static str> {
+        entries
+            .iter()
+            .map(|entry| match entry {
+                Entry::Item(action) => action.label(),
+                Entry::Separator => "---",
+            })
+            .collect()
+    }
 
     #[test]
     fn ids_round_trip() {
@@ -155,15 +210,33 @@ mod tests {
 
     #[test]
     fn menu_lists_every_action_once_in_order() {
-        let labels: Vec<&str> = MENU
-            .iter()
-            .map(|entry| match entry {
-                Entry::Item(action) => action.label(),
-                Entry::Separator => "---",
-            })
-            .collect();
+        let entries = menu(true);
         assert_eq!(
-            labels,
+            labels(&entries),
+            [
+                "Capture",
+                "Open Snipvero",
+                "---",
+                "Open at Login",
+                "---",
+                "About Snipvero",
+                "Check for Updates…",
+                EXIT_LABEL
+            ]
+        );
+        for action in TrayAction::ALL {
+            let count = entries
+                .iter()
+                .filter(|e| **e == Entry::Item(action))
+                .count();
+            assert_eq!(count, 1, "{action:?}");
+        }
+    }
+
+    #[test]
+    fn menu_without_login_items_has_no_login_row() {
+        assert_eq!(
+            labels(&menu(false)),
             [
                 "Capture",
                 "Open Snipvero",
@@ -173,10 +246,13 @@ mod tests {
                 EXIT_LABEL
             ]
         );
-        for action in TrayAction::ALL {
-            let count = MENU.iter().filter(|e| **e == Entry::Item(action)).count();
-            assert_eq!(count, 1, "{action:?}");
-        }
+    }
+
+    #[test]
+    fn login_row_is_shown_only_where_supported() {
+        let shown =
+            menu(crate::login_item::SUPPORTED).contains(&Entry::Item(TrayAction::OpenAtLogin));
+        assert_eq!(shown, cfg!(target_os = "macos"));
     }
 
     #[test]

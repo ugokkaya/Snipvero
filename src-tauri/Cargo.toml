@@ -1,6 +1,6 @@
 [package]
 name = "snipvero"
-version = "0.1.0-beta.4"
+version = "0.1.0-beta.5"
 description = "Open-source screenshot and annotation tool for macOS."
 authors = ["Snipvero contributors"]
 license = "MIT"
@@ -37,7 +37,7 @@ rfd = { version = "0.17", default-features = false }
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "NSArray", "NSData", "NSError", "NSGeometry", "NSNotification", "NSOperation", "NSString", "NSURL"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "NSAppleEventDescriptor", "NSAppleEventManager", "NSArray", "NSData", "NSError", "NSGeometry", "NSNotification", "NSOperation", "NSString", "NSURL"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "libc", "NSApplication", "NSBitmapImageRep", "NSGraphics", "NSImageRep", "NSPasteboard", "NSPasteboardItem", "NSResponder", "NSRunningApplication", "NSScreen", "NSWindow", "NSWorkspace"] }
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFCGTypes", "CFData"] }
 objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGDataProvider", "CGEvent", "CGEventTypes", "CGImage", "CGWindow"] }
@@ -51,6 +51,8 @@ objc2-screen-capture-kit = { version = "0.3", default-features = false, features
     "SCShareableContent",
     "SCStream",
 ] }
+# Open at Login through SMAppService (ADR-033); same objc2 family as above, no other crates.
+objc2-service-management = { version = "0.3", default-features = false, features = ["std", "objc2", "objc2-foundation", "SMAppService"] }
 
 # Clipboard image (CF_DIBV5 + PNG) on Windows; macOS writes NSPasteboard directly (ADR-018).
 [target.'cfg(target_os = "windows")'.dependencies]

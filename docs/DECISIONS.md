@@ -749,3 +749,33 @@ privileges`), and Snipvero never sees a password. After a successful install the
 - **Verification:** frontend tests cover the displayed address, mailto href and non-navigating
   command dispatch; Rust tests cover the fixed destination and enum name. Windows remains
   without native link opening, as before.
+
+## ADR-033: Open at Login on macOS through SMAppService
+
+- **Status:** implemented (2026-11-01). Unit tests and the maintainer's manual QA of the local
+  signed build passed on macOS (Apple silicon): normal launch shows the window, the toggle
+  registers and removes the login item, and a login launch shows only the menu bar icon. Windows:
+  not offered; compile, lint and tests in CI only.
+- **Context:** Snipvero is a menu bar app reached through a global shortcut; after a restart the
+  shortcut does nothing until the user opens the app again. ADR-003 left launch at login out of the
+  MVP; this supersedes that part of it, for macOS only.
+- **Decision:** a checkable tray item **Open at Login**, between **Open Snipvero** and **About**,
+  off by default. It calls `SMAppService.mainApp` `register`/`unregister` (macOS 13+; the app needs
+  14). No settings window (ADR-003) and no frontend command or event: the tray is the only control.
+- **State:** the system's `SMAppService` status is the only source; nothing is stored in
+  `settings.json`, because the user can change it in System Settings › General › Login Items and a
+  copy would drift. The check mark is read again at startup, after a toggle and on every tray click.
+  When the user has turned Snipvero off there (`requiresApproval`), turning it on opens that page,
+  since only the user can allow it again.
+- **Launch at login:** the main window is now created hidden (`"visible": false`) and shown at
+  `RunEvent::Ready`, unless the launch Apple event (`oapp`) carries `keyAELaunchedAsLogInItem` as its
+  `keyAEPropData`; then only the menu bar icon appears. Every other launch shows the window as
+  before (ADR-004). The event is only current while the app finishes launching, which is when Tauri
+  emits `Ready`.
+- **Dependency:** `objc2-service-management` 0.3 (Zlib OR Apache-2.0 OR MIT), the ServiceManagement
+  bindings of the objc2 family already used (ADR-008), with only the `SMAppService` feature. Two
+  Apple Event methods are called with `msg_send!`, because objc2-foundation binds them only together
+  with the objc2-core-services crate.
+- **Alternatives:** `tauri-plugin-autostart` was rejected: it adds the `auto-launch` crate and on
+  macOS writes a launch agent or uses AppleScript instead of the system login item API. A
+  `--hidden` argument was not possible: `SMAppService.mainApp` passes no arguments.
