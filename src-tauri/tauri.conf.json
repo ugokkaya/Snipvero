@@ -31,7 +31,7 @@
     "license": "MIT",
     "copyright": "© 2026 Snipvero Contributors",
     "publisher": "Snipvero contributors",
-    "homepage": "https://github.com/ugokkaya/Snipvero",
+    "homepage": "https://snipvero.app",
     "shortDescription": "Screenshot and annotation tool",
     "longDescription": "Capture a region of the screen, mark it up with arrows, rectangles and text, then copy it or save it as PNG. Runs in the menu bar and works offline.",
     "icon": [

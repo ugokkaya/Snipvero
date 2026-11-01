@@ -52,7 +52,7 @@ src-tauri/
   capabilities/about.json     about: window:allow-close (Escape); no window has an `updater:` permission
   src/lib.rs                  builder, single instance, close→hide, exit policy, command registration
   src/tray.rs                 tray icon (macOS: template image) and menu (Capture, Open Snipvero, About Snipvero, Check for Updates…, Quit)
-  src/about.rs                About window (created on demand), app metadata, fixed links (repository, contributors, license)
+   src/about.rs                About window (created on demand), app metadata, fixed links (website, repository, contributors, license)
   src/update.rs               user-started update check, download, install and restart (tauri-plugin-updater, ADR-028)
   src/shortcut.rs             global shortcut registration, validation, change/suspend commands, status/error reporting
   src/settings.rs             settings.json in the app config directory (capture shortcut), atomic writes (ADR-030)
@@ -287,5 +287,8 @@ Download and Restart ─▶ update_install(progress channel)
   plain `*.png` suggested name.
 - The permission UI opens only a fixed macOS System Settings URL via `NSWorkspace`, without a
   general URL-opening plugin. The About and main windows open only `open_link` targets: the
-  `https` project page (`Cargo.toml` `repository`, equal to `bundle.homepage`), its contributors page, and the
+  fixed `https://snipvero.app` website (`bundle.homepage`), the source repository (`Cargo.toml`
+  `repository`), its contributors page, and the
   bundled `LICENSE.txt` (ADR-024). Signing stays environment-controlled (ADR-011); no keychain changes.
+  About's Contact link opens only the fixed `mailto:support@snipvero.app` in the default email
+  application (ADR-032); it does not send a message or attach capture data.

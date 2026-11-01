@@ -187,6 +187,11 @@ export function App() {
             About Snipvero
           </button>
           {info && (
+            <ExternalLink link="website" href={info.website} className="footer-link">
+              snipvero.app
+            </ExternalLink>
+          )}
+          {info && (
             <ExternalLink link="repository" href={info.repository} className="footer-link">
               <GitHubIcon />
               GitHub

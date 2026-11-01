@@ -4,6 +4,8 @@
 
 ### Added
 
+- Links to **snipvero.app** in the main window footer and About window.
+- A **Contact** link in About for **support@snipvero.app**, opened in the default email app.
 - Change the capture shortcut: **Change…** in the main window's Global shortcut row records a new
   combination, and **Reset to ⌘⇧2** restores the default. It is kept across restarts. Combinations
   the system or most apps rely on are refused, and a change that cannot be registered keeps the
