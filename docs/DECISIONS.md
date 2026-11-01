@@ -688,8 +688,11 @@ privileges`), and Snipvero never sees a password. After a successful install the
 
 ## ADR-030: Customizable capture shortcut and a local settings file
 
-- **Status:** implemented (2026-11-01). Unit-tested on macOS; the recording and registration flow
-  in the running app still needs manual QA. Windows: compile, lint and unit tests in CI only.
+- **Status:** implemented (2026-11-01). Unit tests and the maintainer's manual QA of the local
+  signed build passed on macOS (Apple silicon): change, rejection, cancel, reset and restart.
+  Command+Print Screen never reached the recorder: the system (or keyboard software mapping
+  that key to a screenshot combination) takes it first, which no app can prevent. Windows:
+  compile, lint and unit tests in CI only.
 - **Context:** the capture shortcut was a fixed constant (ADR-014), and the README told users whose
   `Cmd+Shift+2` is taken by another app to use the menu bar instead. ADR-014 already passed the
   accelerator to `register`, so changing it needs a store and a recorder, not a new registration path.
