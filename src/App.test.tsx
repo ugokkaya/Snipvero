@@ -13,6 +13,11 @@ const ipc = vi.hoisted(() => ({
   openScreenRecordingSettings: vi.fn(),
   restartApp: vi.fn(),
   onCaptureFailed: vi.fn(),
+  checkForUpdate: vi.fn(),
+  installUpdate: vi.fn(),
+  cancelUpdate: vi.fn(),
+  updateFailure: vi.fn(),
+  onUpdateCheckRequested: vi.fn(() => Promise.resolve(() => undefined)),
 }));
 vi.mock("./ipc", () => ipc);
 vi.mock("@tauri-apps/api/window", () => ({

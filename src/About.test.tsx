@@ -5,7 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { About, DESCRIPTION, DEVELOPER } from "./About";
 import type { AppInfo } from "./ipc";
 
-const ipc = vi.hoisted(() => ({ appInfo: vi.fn(), openLink: vi.fn() }));
+const ipc = vi.hoisted(() => ({
+  appInfo: vi.fn(),
+  openLink: vi.fn(),
+  checkForUpdate: vi.fn(),
+  installUpdate: vi.fn(),
+  cancelUpdate: vi.fn(),
+  updateFailure: vi.fn(),
+}));
 const close = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 vi.mock("./ipc", () => ipc);
 vi.mock("@tauri-apps/api/window", () => ({
@@ -125,6 +132,14 @@ describe("About window", () => {
     const view = [...container.querySelectorAll("button")].find((b) => b.textContent === "View");
     await click(view);
     expect(ipc.openLink).toHaveBeenCalledWith("license");
+  });
+
+  it("offers Check for Updates without contacting the network on its own", () => {
+    const check = [...container.querySelectorAll("button")].find(
+      (b) => b.textContent === "Check for Updates…",
+    );
+    expect(check).toBeDefined();
+    expect(ipc.checkForUpdate).not.toHaveBeenCalled();
   });
 
   it("closes on Escape", async () => {

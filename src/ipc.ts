@@ -1,6 +1,6 @@
 // Typed wrappers around Tauri commands and events.
 // Event names must match `src-tauri/src/events.rs`; commands are registered in `src-tauri/src/lib.rs`.
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { Rect } from "./overlay/coords";
@@ -10,6 +10,7 @@ export const OVERLAY_LOAD = "overlay-load";
 export const OVERLAY_SELECTION_CLEARED = "overlay-selection-cleared";
 export const OVERLAY_LABEL_PREFIX = "overlay-";
 export const ABOUT_LABEL = "about";
+export const UPDATE_CHECK_REQUESTED = "update-check-requested";
 
 export interface LogicalRect {
   x: number;
@@ -130,3 +131,60 @@ export const openLink = (link: Link) => invoke("open_link", { link });
 export const openScreenRecordingSettings = () => invoke("open_screen_recording_settings");
 
 export const restartApp = () => invoke("restart_app");
+
+/**
+ * Why an update check or install did not succeed (`update::Failure` in Rust). The running
+ * version is never touched by a failure.
+ */
+export const UPDATE_FAILURES = [
+  "unavailable",
+  "network",
+  "manifest",
+  "noBuild",
+  "verification",
+  "location",
+  "busy",
+  "install",
+  "cancelled",
+  "inProgress",
+  "failed",
+] as const;
+export type UpdateFailure = (typeof UPDATE_FAILURES)[number];
+
+/** A rejected update command's reason; anything unexpected counts as `failed`. */
+export function updateFailure(error: unknown): UpdateFailure {
+  return UPDATE_FAILURES.find((failure) => failure === error) ?? "failed";
+}
+
+export interface UpdateCheck {
+  current: string;
+  available: { version: string; notes: string } | null;
+}
+
+export type UpdateProgress =
+  | { event: "started"; data: { contentLength: number | null } }
+  | { event: "downloaded"; data: { bytes: number } }
+  | { event: "installing" }
+  | { event: "restarting" };
+
+/**
+ * Asks the fixed update endpoint (Rust, `tauri.conf.json`) for a newer version. The only network
+ * request of the app, and only when the user asks; the page passes no address (ADR-028). Accepted
+ * from the main and About windows only.
+ */
+export const checkForUpdate = () => invoke<UpdateCheck>("update_check");
+
+/** Downloads, verifies and installs the update the last check found, then restarts the app. */
+export function installUpdate(onProgress: (progress: UpdateProgress) => void) {
+  const channel = new Channel<UpdateProgress>();
+  channel.onmessage = onProgress;
+  return invoke("update_install", { onProgress: channel });
+}
+
+/** The menu bar's Check for Updates… (sent to the main window only). */
+export function onUpdateCheckRequested(handler: () => void): Promise<UnlistenFn> {
+  return getCurrentWebviewWindow().listen(UPDATE_CHECK_REQUESTED, () => handler());
+}
+
+/** Stops a running download; nothing has been installed at that point. */
+export const cancelUpdate = () => invoke("update_cancel");

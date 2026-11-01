@@ -23,6 +23,7 @@
 | FR-11 | macOS: detect a missing Screen Recording permission and guide the user to grant it.                                                              |
 | FR-12 | The main window starts a capture (Capture Region), shows the shortcut, permission and shortcut status, and links to About and GitHub.            |
 | FR-13 | An About window (main window and tray **About Snipvero**) shows the name, the version from the app metadata, license and project page.           |
+| FR-14 | The About window checks for a newer version only when the user asks and installs it only after explicit consent. See FR-14 details below.        |
 
 ### FR-3 details: region selection
 
@@ -36,6 +37,18 @@
 | FR-3.6 | One selection per capture session: starting one on another monitor clears the previous monitor's selection.                  |
 | FR-3.7 | Cursor: crosshair to create, move/resize cursors over the selection. No text selection, native drag or context menu.         |
 | FR-3.8 | Exported region data is in the frame's physical pixels (integer, frame-local).                                               |
+
+### FR-14 details: updates
+
+| ID      | Requirement                                                                                                                                                   |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-14.1 | A click on **Check for Updates…** (main window Updates row, About window, menu bar) is the only trigger. No check at launch, in the background or on a timer. |
+| FR-14.2 | The result shows the current version, and for a newer version its number and English release notes as plain text.                                             |
+| FR-14.3 | Downloading and installing start only after **Download and Restart**, which states that the app quits and reopens.                                            |
+| FR-14.4 | Progress, cancel, up to date, connection, verification and installation failures are shown; a failure leaves the running version working.                     |
+| FR-14.5 | No install or restart while a capture, annotation or export is open; no capture starts while an update installs.                                              |
+| FR-14.6 | Only packages signed with the release updater key for the announced, strictly newer version and this platform (macOS Apple silicon) install.                  |
+| FR-14.7 | The update endpoint is fixed per channel (beta: a manifest in the repository); the page cannot choose a URL. Channels never switch silently.                  |
 
 ### FR-4 / FR-5 details: toolbar and annotations
 
@@ -64,18 +77,19 @@
 
 ## Non-functional requirements
 
-| ID    | Requirement                                                                                                   |
-| ----- | ------------------------------------------------------------------------------------------------------------- |
-| NFR-1 | Correct on HiDPI/Retina displays, mixed scale factors and multiple monitors (including negative coordinates). |
-| NFR-2 | No network access, no telemetry, no uploads. Captures are held in memory only until copied or saved.          |
-| NFR-3 | Low idle memory, fast startup. Capture buffers are released when a capture session ends.                      |
-| NFR-4 | Optimization target (not an MVP gate): shortcut to visible overlay in under 150 ms on a 4K display.           |
-| NFR-5 | MIT license. All dependencies MIT-compatible.                                                                 |
-| NFR-6 | One codebase. Platform-specific code is isolated and used only where necessary.                               |
+| ID    | Requirement                                                                                                                                                                                                                                    |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| NFR-1 | Correct on HiDPI/Retina displays, mixed scale factors and multiple monitors (including negative coordinates).                                                                                                                                  |
+| NFR-2 | No telemetry, no uploads. Network access only for an update check the user starts (FR-14, ADR-028), over HTTPS to GitHub, without screenshots, annotations, file paths or identifiers. Captures are held in memory only until copied or saved. |
+| NFR-3 | Low idle memory, fast startup. Capture buffers are released when a capture session ends.                                                                                                                                                       |
+| NFR-4 | Optimization target (not an MVP gate): shortcut to visible overlay in under 150 ms on a 4K display.                                                                                                                                            |
+| NFR-5 | MIT license. All dependencies MIT-compatible.                                                                                                                                                                                                  |
+| NFR-6 | One codebase. Platform-specific code is isolated and used only where necessary.                                                                                                                                                                |
 
 ## Out of scope for the MVP
 
 - Selection spanning multiple monitors
 - Launch at login, settings UI, shortcut customization UI, themes
 - Additional tools (blur, pen, highlighter, counters), upload/sharing of any kind
+- Automatic update checks (a possible later opt-in setting, ADR-028)
 - Linux support

@@ -19,6 +19,7 @@ index.html, src/              React frontend (every window loads index.html)
   App.tsx                     main window: Capture Region, features, permission/shortcut status, About, GitHub;
                               sizes the window to its content (useFitWindow.ts, fit.ts)
   About.tsx                   About window: name, version and copyright from Rust, license, project links
+  Updates.tsx, update.ts      Check for Updates: main window status row and About section; pure view reducer (ADR-028)
   ExternalLink.tsx            link opened by Rust (`open_link`); the web view never navigates
   useAppInfo.ts, icons.tsx    app metadata hook; line icons
   App.css                     theme tokens (light and dark), main/About window, overlay styles
@@ -46,10 +47,11 @@ src-tauri/
   icons/                      app icons generated from icons/source/app-icon.svg; tray-template.png (macOS menu bar)
   capabilities/default.json   frontend permissions for "main", "about" and "overlay-*" (core:default)
   capabilities/fit-to-content.json  main, about: window:allow-set-size (fit to content)
-  capabilities/about.json     about: window:allow-close (Escape)
+  capabilities/about.json     about: window:allow-close (Escape); no window has an `updater:` permission
   src/lib.rs                  builder, single instance, close→hide, exit policy, command registration
-  src/tray.rs                 tray icon (macOS: template image) and menu (Capture, Open Snipvero, About Snipvero, Quit)
+  src/tray.rs                 tray icon (macOS: template image) and menu (Capture, Open Snipvero, About Snipvero, Check for Updates…, Quit)
   src/about.rs                About window (created on demand), app metadata, fixed links (repository, contributors, license)
+  src/update.rs               user-started update check, download, install and restart (tauri-plugin-updater, ADR-028)
   src/shortcut.rs             global shortcut registration, status/error reporting
   src/system/{mod,macos}.rs   previous-app focus restoration, fixed System Settings URL, open URL / file (NSWorkspace)
   src/events.rs               event names shared with the frontend
@@ -238,6 +240,33 @@ Key design points:
   CSS size equals the display bounds, and the image/CSS ratio equals the scale (1.000 and 2.000).
 - **Platform code only where needed:** capture backend, overlay window level/focus, cursor location.
 
+## Updates
+
+Implemented on macOS (ADR-028); other platforms report updates as unavailable.
+
+```
+Check for Updates… ─▶ update_check (main or About window; the menu bar item emits
+  (main row, About,     `update-check-requested` to the main window, whose row starts it)
+   menu bar)
+                             ├─ no public key / not macOS ─▶ "unavailable"
+                             └─ GET fixed manifest (tauri.conf.json, HTTPS only, 30 s)
+                                  ├─ not newer by SemVer precedence ─▶ up to date
+                                  ├─ no darwin-aarch64 entry ─▶ "noBuild"
+                                  └─ newer ─▶ kept in UpdateState; page shows version + notes
+Download and Restart ─▶ update_install(progress channel)
+                        ├─ app not a replaceable .app (DMG, translocated, dev binary) ─▶ "location"
+                        ├─ capture open ─▶ "busy"
+                        ├─ download (Cancel / About closed aborts) ─▶ minisign + signed version check
+                        ├─ take the capture lock (no capture can start) ─▶ "busy" if one started
+                        ├─ plugin swaps the bundle (admin prompt if needed; restores on failure)
+                        └─ request_restart
+```
+
+- The page passes no URL, version or file; installing uses the update found by the last check.
+- Every failure leaves the running app in place and is reported as one of the reasons in
+  `update::Failure` (mirrored in `src/ipc.ts`); the page words the message.
+- Release notes are shown as plain text, at most 5000 characters.
+
 ## Security and privacy
 
 - CSP: `default-src 'self'`, plus `connect-src ipc: http://ipc.localhost` (required for fast IPC).
@@ -245,8 +274,10 @@ Key design points:
 - Capabilities: `core:default` for `main`, `about` and `overlay-*`; in addition only
   `core:window:allow-set-size` for `main` and `about`, and `core:window:allow-close` for `about`. App commands are
   registered in `lib.rs`.
-- No network-capable dependencies. Captured frames live only in memory (`CaptureState`) and are
-  dropped when the capture ends. Only an explicit Save writes a file, to the path the user chose.
+- Network access exists only in the updater (ADR-028), only after **Check for Updates…**, from
+  Rust, to the fixed HTTPS endpoint and the release asset it names; no other code sends requests,
+  and captures, annotations and file paths are never sent. Captured frames live only in memory
+  (`CaptureState`) and are dropped when the capture ends. Only an explicit Save writes a file, to the path the user chose.
 - The save dialog runs from Rust (`rfd`); the page cannot choose a path, and Rust accepts only a
   plain `*.png` suggested name.
 - The permission UI opens only a fixed macOS System Settings URL via `NSWorkspace`, without a

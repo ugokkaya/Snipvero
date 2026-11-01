@@ -554,3 +554,103 @@ Contributors`. Tauri does not embed `bundle.homepage` or `bundle.copyright` in t
   No remote workflow, runner setup, tap push or publication was performed during implementation.
 - **Dependencies:** none added. The published ad-hoc `v0.1.0-beta.1` remains unchanged; use a new
   package version and bundle build number for a future notarized release, not replacement assets.
+
+## ADR-028: User-initiated, signed in-app updates over HTTPS
+
+- **Status:** accepted (2026-11-01), maintainer decision. Supersedes NFR-2's "no network access"
+  and ADR-024's statement that the app makes no network requests. Implemented and unit-tested on
+  macOS (Apple silicon); the real install path is covered by a local test procedure (RELEASE.md
+  §11). Windows builds compile the code but never
+  offer an update.
+- **Context:** installed betas could only be updated by downloading a new DMG by hand. The
+  maintainer asked for an in-app update path built on Tauri's official updater, without automatic
+  or background checks, with explicit consent before anything is downloaded or installed, and
+  without weakening the privacy policy beyond what an update check needs.
+- **Decision:**
+  - **Trigger:** only a click on **Check for Updates…** starts network access: in the main
+    window's **Updates** status row, the About window, or the menu bar item (which shows the main
+    window and starts the check in its row). No check at launch, in the background or on a timer.
+    The main window placement was the maintainer's choice after the first manual test found the
+    About-only button too hidden. A later automatic check would be a separate,
+    opt-in setting. Downloading and installing start only after **Download and Restart**, whose
+    text says that Snipvero quits and reopens.
+  - **Mechanism:** `tauri-plugin-updater` 2.14.1, driven from Rust (`src-tauri/src/update.rs`).
+    The page calls three Snipvero commands (`update_check`, `update_install`, `update_cancel`),
+    accepted only from the main and About windows (never the capture overlays), with one download
+    or install at a time across both; no capability grants an `updater:` permission, because
+    the plugin's JavaScript API accepts proxies, headers and targets. The endpoint and public key
+    are fixed in `tauri.conf.json`; the page passes neither. Its check timeout is 30 s; the
+    client is HTTPS-only (also across redirects), with connect and idle timeouts.
+  - **Verification:** the plugin checks the package's minisign signature against the embedded
+    public key and, with `requireSignedVersion`, that the signature was made for the announced
+    version, so a tampered manifest cannot pair a new version number with an older genuine
+    package. Since no earlier release has an updater, this applies from the first one. A version
+    is an update only if newer by SemVer precedence (`cmp_precedence`; build metadata does not
+    count, and release versions may not carry it); downgrades are never offered. The manifest
+    lists only `darwin-aarch64`; any other platform gets "not available for your Mac".
+  - **Install safety:** refused while a capture (including an export) is open; the install takes
+    the capture lock, so no capture can start until the app restarts. Refused from a disk image,
+    a translocated copy or anything but a `.app` bundle. The plugin swaps the bundle in one step
+    (`renamex_np(RENAME_SWAP)` on APFS) and restores the previous app on failure; where the folder
+    is not writable it uses macOS's own administrator prompt (AppleScript `with administrator
+privileges`), and Snipvero never sees a password. After a successful install the app restarts
+    through `AppHandle::request_restart`. Closing the About window cancels a download started there.
+  - **Packages:** macOS updates are `Snipvero_<version>_aarch64.app.tar.gz` plus a `.sig`, not the
+    DMG (Tauri updater documentation). `createUpdaterArtifacts` stays unset: it would need the
+    private key during every `tauri build` (CI included) and would archive the app before
+    notarization. `scripts/notarize-macos.mjs` archives the **stapled** app (no AppleDouble files
+    or extended attributes), signs it with `tauri signer sign --app-version`, verifies the
+    signature in Node (Ed25519 and BLAKE2b-512 from `node:crypto`) and writes the manifest.
+    `verify-macos-bundle.mjs --updater` extracts the package, runs every app check on it and
+    requires it to be byte-identical (files, modes, links) to the verified app.
+  - **Keys:** the updater key is a minisign (Ed25519) key, separate from the Apple Developer ID
+    certificate: Apple's signature makes macOS trust the app; the updater key makes the installed
+    app trust a package. Only the public key is in the app. The private key stays an encrypted
+    file outside the repository, its password in the login Keychain; neither goes into GitHub
+    secrets, the build environment or logs (RELEASE.md §6a). The maintainer generated it on
+    2026-11-01 (key ID `F4466B8E6A74D65F`). A build without a public key reports updates as
+    unavailable, and the release script and `verify:macos --distribution` refuse it.
+  - **Channel:** the endpoint is compiled in per channel. Pre-release versions use
+    `https://raw.githubusercontent.com/ugokkaya/Snipvero/main/updater/beta.json`, a file in this
+    repository, changed by one reviewed commit after the release is public and its assets were
+    re-downloaded and verified. A failed or partial publication leaves the previous manifest in
+    place. The manifest points only at immutable versioned release assets. GitHub's
+    `/releases/latest` is not used (it ignores pre-releases). Moving beta users to a stable
+    channel is a future, explicit decision, not something a manifest can do silently.
+  - **Privacy:** requests go to `raw.githubusercontent.com` (manifest) and `github.com`, which
+    redirects release downloads to `release-assets.githubusercontent.com`. They carry no version
+    or other variable in the URL, no cookies or identifiers, and the User-Agent
+    `tauri-plugin-updater/<version>`; GitHub sees the IP address, User-Agent, time and TLS
+    connection data. No screenshot, annotation, file path or account data is sent; captures stay
+    local. The web view's CSP is unchanged: the requests come from Rust.
+- **Rejected:** the plugin's JavaScript API (wider surface than needed); `native-tls` (41 instead
+  of 47 new crates, but macOS's deprecated Secure Transport without TLS 1.3); the plugin's
+  `system-proxy` feature (left out to keep the dependency set small; proxy-only networks cannot
+  check for updates, a documented limitation); a mutable "latest" GitHub release asset as the
+  manifest (replacing an asset is not atomic); a self-written update engine.
+- **Dependencies:** `tauri-plugin-updater` 2.14.1 (MIT OR Apache-2.0) with `rustls-tls` only.
+  It adds 47 crates on macOS, all within ADR-021's policy, among them reqwest, hyper, rustls,
+  `rustls-platform-verifier` (the macOS trust store), ring (Apache-2.0 AND ISC), subtle
+  (BSD-3-Clause), minisign-verify, tar and osakit. `semver` and `serde_json` become direct
+  dependencies; both were already in the tree (`tauri::generate_context!` needs `serde_json` once
+  the configuration has a `plugins` section). Tauri's `test` feature (no crates) for the updater
+  tests, dev only. Release executable 4.55 MB → 6.21 MB, DMG 2.67 MB → 3.12 MB (beta.2 → beta.3
+  ad-hoc build).
+- **Migration:** `v0.1.0-beta.2` has no updater, so the first updater-enabled version must be
+  installed manually once from its DMG. Earlier releases, tags and assets are not changed. The
+  Screen Recording grant is expected to survive updates, because the identifier and Developer ID
+  team stay the same (to be confirmed in the first real update).
+- **Verification:** Rust tests run the real plugin with Snipvero's comparator on Tauri's mock
+  runtime with test-only fixtures (newer, same, older and build-metadata versions, wrong
+  architecture, malformed manifests, corrupted package, another key, a package signed for another
+  version, a malformed signature), plus the version order, error classification, install
+  location, capture/install exclusion, the fixed configuration and the absence of updater
+  permissions. Node tests cover signature verification, manifest validation, channel, key path
+  and release configuration. Vitest covers the About window's update states and that nothing is
+  requested or installed without a click. On macOS 27 (Apple silicon), with the local test builds
+  of RELEASE.md §11: the plugin's bundle swap on APFS refused a corrupted package without touching
+  the installed copy and replaced it with the genuine package (valid signature, new version, no
+  leftovers), and `verify-macos-bundle.mjs --updater` accepted the genuine package and rejected a
+  modified app, another key's signature and a mismatched manifest, and rejected the test build
+  itself. Not verified yet: the About window flows in the running app, the administrator prompt,
+  restart after install, and an update between two published releases.

@@ -8,3 +8,6 @@ pub const OVERLAY_LOAD: &str = "overlay-load";
 
 /// Sent to an overlay with the session ID when another display took the selection: clear it.
 pub const OVERLAY_SELECTION_CLEARED: &str = "overlay-selection-cleared";
+
+/// Sent to the main window by the menu bar's **Check for Updates…**: start an update check.
+pub const UPDATE_CHECK_REQUESTED: &str = "update-check-requested";

@@ -9,12 +9,13 @@ mod shortcut;
 mod system;
 mod transfer;
 mod tray;
+mod update;
 
 use serde::Serialize;
 use tauri::{AppHandle, Manager, RunEvent, State, WindowEvent};
 use tray::TrayAction;
 
-const MAIN_WINDOW: &str = "main";
+pub(crate) const MAIN_WINDOW: &str = "main";
 
 pub fn run() {
     let app = tauri::Builder::default()
@@ -23,8 +24,10 @@ pub fn run() {
             show_main_window(app);
         }))
         .plugin(shortcut::plugin())
+        .plugin(update::plugin())
         .manage(overlay::CaptureState::default())
         .manage(shortcut::ShortcutRegistry::default())
+        .manage(update::UpdateState::default())
         .invoke_handler(tauri::generate_handler![
             overlay::overlay_frame_info,
             overlay::overlay_frame,
@@ -40,6 +43,9 @@ pub fn run() {
             open_link,
             open_screen_recording_settings,
             restart_app,
+            update::update_check,
+            update::update_install,
+            update::update_cancel,
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]
@@ -51,13 +57,18 @@ pub fn run() {
             devtools::start_from_args(app.handle());
             Ok(())
         })
-        .on_window_event(|window, event| {
-            if let WindowEvent::CloseRequested { api, .. } = event
-                && close_policy(window.label()) == ClosePolicy::Hide
+        .on_window_event(|window, event| match event {
+            WindowEvent::CloseRequested { api, .. }
+                if close_policy(window.label()) == ClosePolicy::Hide =>
             {
                 api.prevent_close();
                 let _ = window.hide();
             }
+            // A download started there shows its progress only there; nothing is installed yet.
+            WindowEvent::Destroyed if window.label() == about::LABEL => {
+                update::cancel_download(window.app_handle(), Some(about::LABEL));
+            }
+            _ => {}
         })
         .build(tauri::generate_context!())
         .expect("failed to build Snipvero");
@@ -78,6 +89,7 @@ pub(crate) fn handle_tray_action(app: &AppHandle, action: TrayAction) {
         TrayAction::Capture => overlay::start(app),
         TrayAction::Open => show_main_window(app),
         TrayAction::About => about::show(app),
+        TrayAction::CheckForUpdates => update::request_check(app),
         TrayAction::Exit => app.exit(0),
     }
 }
