@@ -510,10 +510,11 @@ decision).
 
 ## 10. Homebrew Cask integration
 
-There is no published Snipvero cask or tap yet. Apple acceptance does not register one. After a
-**new notarized release is published**, a maintainer may create `ugokkaya/homebrew-tap` and add
-the generated `<output-dir>/dist/snipvero.rb` as `Casks/snipvero.rb`. Do not publish the validation
-cask for `0.1.0-beta.1`: its URL would download the old ad-hoc asset, not the new notarized candidate.
+The official Tap is [ugokkaya/homebrew-tap](https://github.com/ugokkaya/homebrew-tap), initially
+published for `0.1.0-beta.3` after its notarized release was public and re-downloaded/verified.
+Update `Casks/snipvero.rb` from the generated `<output-dir>/dist/snipvero.rb` only after that gate.
+Never publish the validation cask for `0.1.0-beta.1`: its URL would download the old ad-hoc asset,
+not a new notarized candidate. Tap publication does not enable any release workflow.
 
 The generated cask uses the final **stapled DMG's** SHA-256 (stapling changes the file), immutable
 versioned GitHub release URL, `app "Snipvero.app"`, `arch: :arm64` and `macos: :sonoma` (14+).
@@ -530,6 +531,16 @@ brew audit --cask --online ugokkaya/tap/snipvero
 brew fetch --cask ugokkaya/tap/snipvero
 brew install --cask ugokkaya/tap/snipvero
 ```
+
+Homebrew 7 may require a trust record for the reviewed cask before fetch/install:
+`brew trust --cask ugokkaya/tap/snipvero`. Prefer this cask-specific record to trusting the entire
+Tap. It is unrelated to macOS Gatekeeper, which must remain enabled.
+
+Initial beta.3 validation on macOS 27 Apple silicon: Tap clone, cask style, fetch and checksum
+checks passed. `brew audit --cask --online` stopped at Homebrew's CLT compatibility preflight
+("Command Line Tools does not support macOS 27"); the audit is **not verified**, and no CLT
+deletion/update or diagnostic bypass was performed. Install, upgrade and uninstall were not run
+against the maintainer's existing manual app; use the clean-Mac procedure below.
 
 Test on a clean Apple silicon Mac: install, launch, Screen Recording, capture/copy/save, upgrade,
 and uninstall. Do not use `--no-quarantine` or bypass audit failures. Do not overwrite an existing

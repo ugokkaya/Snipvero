@@ -69,6 +69,19 @@ notarization tickets. The release is for Apple silicon only; no Intel or univers
 provided. Users upgrading from Beta 1 may need to grant Screen Recording permission again because
 the signing identity has changed.
 
+### Install with Homebrew
+
+```sh
+brew tap ugokkaya/tap
+brew install --cask ugokkaya/tap/snipvero
+```
+
+The [official Tap](https://github.com/ugokkaya/homebrew-tap) uses the same signed and notarized
+Apple silicon DMG, with a pinned SHA-256. If Homebrew 7 asks you to trust the cask, review it and
+run `brew trust --cask ugokkaya/tap/snipvero`, then retry the install. This does not disable
+Gatekeeper. If you already installed Snipvero manually, quit it and back up that copy before
+switching installation methods; do not force an overwrite.
+
 ### Updates
 
 Starting with Beta 3, Snipvero can update itself: click **Check for Updates…** in the **Updates**
@@ -96,8 +109,7 @@ macOS remembers this choice for that copy of Snipvero. Do not turn off Gatekeepe
 Mac to run Snipvero. If you prefer not to approve a download, build Snipvero from source instead.
 
 This warning applies only to the older `0.1.0-beta.1` download. New releases must pass Developer ID
-signing and Apple notarization checks ([release process](docs/RELEASE.md)). Homebrew
-distribution is being prepared; no official Snipvero cask or tap is published yet.
+signing and Apple notarization checks ([release process](docs/RELEASE.md)).
 
 ## Install from source
 
