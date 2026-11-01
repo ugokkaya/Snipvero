@@ -9,8 +9,9 @@ Moving it into the workflows directory and provisioning a runner require separat
 then, it needs `MACOS_SIGNING_ENABLED=true`; manual runs default to artifacts only (`publish=false`).
 No workflow creates certificates or changes repository settings.
 The existing `v0.1.0-beta.1` download remains the original ad-hoc build; do not replace its assets.
-`0.1.0-beta.2` is published. The current source version is `0.1.0-beta.3`, the first with in-app
-updates (ADR-028). Its local release candidate passed Developer ID signing, Apple notarization,
+`0.1.0-beta.2` and `0.1.0-beta.3` are published. The current source version is `0.1.0-beta.4`
+(build 4), adding a customizable capture shortcut and website/support links. Beta 3 introduced
+in-app updates (ADR-028). Every new candidate must pass Developer ID signing, Apple notarization,
 stapling, Gatekeeper and updater signature verification; the separate updater key is described
 in §6a. The workflow template predates updater packages and must be reviewed for them before any
 activation. No release step authorises registering a self-hosted runner, moving/dispatching the
@@ -20,7 +21,7 @@ workflow template, enabling `MACOS_SIGNING_ENABLED`, or enabling automatic publi
 
 There are two version numbers, because Apple's bundle fields accept integers only (ADR-022).
 
-**Package version** `0.1.0-beta.3` (SemVer pre-release, never with `+build` metadata: the updater
+**Package version** `0.1.0-beta.4` (SemVer pre-release, never with `+build` metadata: the updater
 ignores it when ordering versions, so a rebuild needs a new version). It lives in three manifests, and
 `manifest_versions_match` (Rust test) fails if they differ:
 
@@ -28,8 +29,8 @@ ignores it when ordering versions, so a rebuild needs a new version). It lives i
 - `src-tauri/Cargo.toml` → `version` (then run `cargo check` so `Cargo.lock` follows)
 - `src-tauri/tauri.conf.json` → `version`
 
-It names the Git tag (`v0.1.0-beta.3`), the DMG (`Snipvero_0.1.0-beta.3_aarch64.dmg`), the
-updater package (`Snipvero_0.1.0-beta.3_aarch64.app.tar.gz`), the Windows installer and the GitHub
+It names the Git tag (`v0.1.0-beta.4`), the DMG (`Snipvero_0.1.0-beta.4_aarch64.dmg`), the
+updater package (`Snipvero_0.1.0-beta.4_aarch64.app.tar.gz`), the Windows installer and the GitHub
 Release. A pre-release version selects the beta update channel (§9).
 
 **Bundle versions** in the app's `Info.plist`, both one to three period-separated integers:
@@ -37,7 +38,7 @@ Release. A pre-release version selects the beta update channel (§9).
 | Key                          | Value   | Set in                                                     |
 | ---------------------------- | ------- | ---------------------------------------------------------- |
 | `CFBundleShortVersionString` | `0.1.0` | `src-tauri/Info.plist` (overrides the bundler's value)     |
-| `CFBundleVersion`            | `3`     | `tauri.conf.json` → `bundle.macOS.bundleVersion` (a build) |
+| `CFBundleVersion`            | `4`     | `tauri.conf.json` → `bundle.macOS.bundleVersion` (a build) |
 
 `CFBundleShortVersionString` is the package version without its pre-release suffix;
 `bundle_versions_follow_apple_format` (Rust test) fails if it differs or if either value is not in
