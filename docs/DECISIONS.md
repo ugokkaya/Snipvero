@@ -769,7 +769,7 @@ privileges`), and Snipvero never sees a password. After a successful install the
   since only the user can allow it again.
 - **Off the main thread (2026-11-03):** every `SMAppService` call (status, register, unregister) is
   a synchronous request to `backgroundtaskmanagementd`. In beta.5 the status read ran on the main
-  thread twice per tray click (button down and up). A user's Mac froze with the tray menu open and
+  thread twice per tray click (button down and up). Two Macs froze with the tray menu open and
   the cursor spinning; the menu bar and Dock did not respond while other apps did. The status read
   measured up to 465 ms when idle (20 reads, macOS 27.2, Apple silicon) and is unbounded under
   load. All calls now run on a background thread, one at a time behind a lock. A click triggers one
