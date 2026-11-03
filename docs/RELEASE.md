@@ -9,7 +9,7 @@ Moving it into the workflows directory and provisioning a runner require separat
 then, it needs `MACOS_SIGNING_ENABLED=true`; manual runs default to artifacts only (`publish=false`).
 No workflow creates certificates or changes repository settings.
 The existing `v0.1.0-beta.1` download remains the original ad-hoc build; do not replace its assets.
-`0.1.0-beta.2` to `0.1.0-beta.5` are published. The current source version is
+`0.1.0-beta.2` to `0.1.0-beta.6` are published. The current source version is
 `0.1.0-beta.6` (build 6), fixing a menu bar freeze and letting the capture shortcut cancel a
 capture (ADR-033, ADR-034). Beta 3 introduced
 in-app updates (ADR-028). Every new candidate must pass Developer ID signing, Apple notarization,
@@ -18,10 +18,10 @@ in §6a. The workflow template predates updater packages and must be reviewed fo
 activation. No release step authorises registering a self-hosted runner, moving/dispatching the
 workflow template, enabling `MACOS_SIGNING_ENABLED`, or enabling automatic publication.
 
-Beta 5's eight public release assets were re-downloaded and verified against the candidate,
+Beta 6's eight public release assets were re-downloaded and verified against the candidate,
 including the full distribution/updater gate and byte-identical DMG/updater app custody checks.
-Only afterward were the beta update manifest and Homebrew cask updated. Beta 5 is published as the
-repository's latest release (not a GitHub pre-release), like Beta 4 after the maintainer's choice;
+Only afterward were the beta update manifest and Homebrew cask updated. Beta 6 is published as the
+repository's latest release (not a GitHub pre-release), like Beta 4 and 5 after the maintainer's choice;
 the update channel follows the version, not that flag. The maintainer reported working in-app
 beta.3 → beta.4 and beta.4 → beta.5 updates. Homebrew installation, native website/mail-app
 opening and clean-Mac quarantine QA remain unverified; publishing the release does not
