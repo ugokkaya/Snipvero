@@ -98,12 +98,7 @@ pub(crate) fn handle_tray_action(app: &AppHandle, action: TrayAction) {
     match action {
         TrayAction::Capture => overlay::start(app),
         TrayAction::Open => show_main_window(app),
-        TrayAction::OpenAtLogin => {
-            if let Err(error) = login_item::set_enabled(!login_item::is_enabled()) {
-                eprintln!("[login item] {error}");
-            }
-            tray::refresh_open_at_login(app);
-        }
+        TrayAction::OpenAtLogin => tray::toggle_open_at_login(app),
         TrayAction::About => about::show(app),
         TrayAction::CheckForUpdates => update::request_check(app),
         TrayAction::Exit => app.exit(0),

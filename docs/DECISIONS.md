@@ -767,6 +767,14 @@ privileges`), and Snipvero never sees a password. After a successful install the
   copy would drift. The check mark is read again at startup, after a toggle and on every tray click.
   When the user has turned Snipvero off there (`requiresApproval`), turning it on opens that page,
   since only the user can allow it again.
+- **Off the main thread (2026-11-03):** every `SMAppService` call (status, register, unregister) is
+  a synchronous request to `backgroundtaskmanagementd`. In beta.5 the status read ran on the main
+  thread twice per tray click (button down and up). A user's Mac froze with the tray menu open and
+  the cursor spinning; the menu bar and Dock did not respond while other apps did. The status read
+  measured up to 465 ms when idle (20 reads, macOS 27.2, Apple silicon) and is unbounded under
+  load. All calls now run on a background thread, one at a time behind a lock. A click triggers one
+  read, on button down, and skips it while another call runs. The check mark starts off and is
+  updated once the first read returns.
 - **Launch at login:** the main window is now created hidden (`"visible": false`) and shown at
   `RunEvent::Ready`, unless the launch Apple event (`oapp`) carries `keyAELaunchedAsLogInItem` as its
   `keyAEPropData`; then only the menu bar icon appears. Every other launch shows the window as
