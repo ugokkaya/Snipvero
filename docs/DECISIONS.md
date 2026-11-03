@@ -787,3 +787,23 @@ privileges`), and Snipvero never sees a password. After a successful install the
 - **Alternatives:** `tauri-plugin-autostart` was rejected: it adds the `auto-launch` crate and on
   macOS writes a launch agent or uses AppleScript instead of the system login item API. A
   `--hidden` argument was not possible: `SMAppService.mainApp` passes no arguments.
+
+## ADR-034: The capture shortcut also cancels an open capture
+
+- **Status:** implemented (2026-11-03). Unit tests on macOS; manual QA of a signed build pending.
+  Windows: compile, lint and tests in CI only.
+- **Context:** the overlays cover every display above all other windows (`NSScreenSaverWindowLevel`)
+  and show a frozen frame. Escape reaches only the overlay page. A page that crashes or hangs after
+  it is shown therefore leaves no way out but Force Quit, and the screen looks frozen. The ready
+  timeout (8 s) covers only overlays that never appear, and a second shortcut press was ignored
+  while a capture was open. Not observed in use; found by reading the code while investigating a
+  freeze (see ADR-033).
+- **Decision:** pressing the capture shortcut while a capture is open ends it exactly as Escape does
+  (`overlay::close`, focus back to the previous app). The OS delivers the shortcut to Rust, so it
+  works whatever state the page is in. During an export it does nothing, as Escape: the save
+  panel is a sheet on an overlay. A press while the frames are still being taken is ignored, as
+  before. The tray's and the main window's Capture still only start a capture: the overlays cover
+  both.
+- **Alternatives:** a page heartbeat that closes the capture when the page stops answering was
+  rejected for now (user decision). It would recover without the user knowing the shortcut, but
+  a long legitimate stall could close a capture and lose its annotations.
