@@ -767,6 +767,14 @@ privileges`), and Snipvero never sees a password. After a successful install the
   copy would drift. The check mark is read again at startup, after a toggle and on every tray click.
   When the user has turned Snipvero off there (`requiresApproval`), turning it on opens that page,
   since only the user can allow it again.
+- **Off the main thread (2026-11-03):** every `SMAppService` call (status, register, unregister) is
+  a synchronous request to `backgroundtaskmanagementd`. In beta.5 the status read ran on the main
+  thread twice per tray click (button down and up). Two Macs froze with the tray menu open and
+  the cursor spinning; the menu bar and Dock did not respond while other apps did. The status read
+  measured up to 465 ms when idle (20 reads, macOS 27.2, Apple silicon) and is unbounded under
+  load. All calls now run on a background thread, one at a time behind a lock. A click triggers one
+  read, on button down, and skips it while another call runs. The check mark starts off and is
+  updated once the first read returns.
 - **Launch at login:** the main window is now created hidden (`"visible": false`) and shown at
   `RunEvent::Ready`, unless the launch Apple event (`oapp`) carries `keyAELaunchedAsLogInItem` as its
   `keyAEPropData`; then only the menu bar icon appears. Every other launch shows the window as
@@ -779,3 +787,23 @@ privileges`), and Snipvero never sees a password. After a successful install the
 - **Alternatives:** `tauri-plugin-autostart` was rejected: it adds the `auto-launch` crate and on
   macOS writes a launch agent or uses AppleScript instead of the system login item API. A
   `--hidden` argument was not possible: `SMAppService.mainApp` passes no arguments.
+
+## ADR-034: The capture shortcut also cancels an open capture
+
+- **Status:** implemented (2026-11-03). Unit tests on macOS; manual QA of a signed build pending.
+  Windows: compile, lint and tests in CI only.
+- **Context:** the overlays cover every display above all other windows (`NSScreenSaverWindowLevel`)
+  and show a frozen frame. Escape reaches only the overlay page. A page that crashes or hangs after
+  it is shown therefore leaves no way out but Force Quit, and the screen looks frozen. The ready
+  timeout (8 s) covers only overlays that never appear, and a second shortcut press was ignored
+  while a capture was open. Not observed in use; found by reading the code while investigating a
+  freeze (see ADR-033).
+- **Decision:** pressing the capture shortcut while a capture is open ends it exactly as Escape does
+  (`overlay::close`, focus back to the previous app). The OS delivers the shortcut to Rust, so it
+  works whatever state the page is in. During an export it does nothing, as Escape: the save
+  panel is a sheet on an overlay. A press while the frames are still being taken is ignored, as
+  before. The tray's and the main window's Capture still only start a capture: the overlays cover
+  both.
+- **Alternatives:** a page heartbeat that closes the capture when the page stops answering was
+  rejected for now (user decision). It would recover without the user knowing the shortcut, but
+  a long legitimate stall could close a capture and lose its annotations.

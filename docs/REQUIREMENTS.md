@@ -18,7 +18,7 @@
 | FR-6  | Copy the annotated region to the clipboard as an image at native (physical pixel) resolution.                                                        |
 | FR-7  | Save the annotated region as PNG via a save dialog.                                                                                                  |
 | FR-8  | Run in the macOS menu bar / Windows system tray with **Capture**, **About** and **Exit** actions. Closing the main window keeps the app running.     |
-| FR-9  | `Escape` cancels the capture from any state and closes all overlays.                                                                                 |
+| FR-9  | `Escape` cancels the capture from any state and closes all overlays; so does the capture shortcut (ADR-034).                                         |
 | FR-10 | Only one instance runs at a time. A second launch brings the existing instance forward.                                                              |
 | FR-11 | macOS: detect a missing Screen Recording permission and guide the user to grant it.                                                                  |
 | FR-12 | The main window starts a capture (Capture Region), shows the shortcut, permission and shortcut status, and links to About, the website and GitHub.   |

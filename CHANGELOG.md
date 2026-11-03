@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.1.0-beta.6 — 2026-11-03
+
+### Fixed
+
+- Clicking the menu bar icon could freeze the open menu, and with it the menu bar and Dock, while
+  macOS was slow to report the Open at Login setting. The setting is now read and changed in the
+  background, so the menu never waits for it.
+
+### Added
+
+- Pressing the capture shortcut (<kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>2</kbd> by default) during a
+  capture cancels it, as <kbd>Esc</kbd> does. It works even if the capture screen stops responding.
+
 ## 0.1.0-beta.5 — 2026-11-01
 
 ### Added

@@ -188,6 +188,16 @@ impl CaptureState {
             .is_some_and(|s| s.id == session && !s.exporting)
     }
 
+    /// What a press of the capture shortcut does now: start a capture when none is open, end the
+    /// open one, or nothing during its export (see `may_cancel`).
+    fn on_shortcut(&self) -> ShortcutPress {
+        match self.session().as_ref() {
+            None => ShortcutPress::Start,
+            Some(s) if s.exporting => ShortcutPress::Ignore,
+            Some(s) => ShortcutPress::Cancel(s.id),
+        }
+    }
+
     /// Allows the next capture when none was stored (a failure before or while capturing).
     fn abort(&self) {
         self.session().take();
@@ -235,6 +245,13 @@ impl CaptureState {
             .and_then(|s| Some((s.id, s.frames.get(index)?.clone())))
             .ok_or_else(|| format!("no captured frame {index}"))
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ShortcutPress {
+    Start,
+    Cancel(u64),
+    Ignore,
 }
 
 #[derive(Debug, Serialize)]
@@ -312,6 +329,21 @@ pub fn start(app: &AppHandle) {
             }
         }
     });
+}
+
+/// The capture shortcut: starts a capture, or ends the open one as Escape does. Escape reaches only
+/// the overlay page; the shortcut is registered with the OS, so it still works when that page has
+/// crashed or hangs, which would otherwise leave every display covered by a frozen frame above all
+/// other windows.
+pub fn start_or_cancel(app: &AppHandle) {
+    match app.state::<CaptureState>().on_shortcut() {
+        ShortcutPress::Start => start(app),
+        ShortcutPress::Cancel(session) => {
+            eprintln!("[overlay] shortcut ends capture {session}");
+            close_on_main_thread(app, session, None);
+        }
+        ShortcutPress::Ignore => eprintln!("[overlay] shortcut ignored during an export"),
+    }
 }
 
 /// Closes all overlays of capture `session`, releases its frames and gives focus back to the
@@ -644,7 +676,7 @@ mod tests {
     use std::sync::Arc;
     use std::time::Instant;
 
-    use super::{CaptureState, Selection, Session, index_from_label, label};
+    use super::{CaptureState, Selection, Session, ShortcutPress, index_from_label, label};
     use crate::capture::Frame;
     use crate::geometry::{LogicalRect, PixelRect};
 
@@ -815,6 +847,22 @@ mod tests {
         assert!(!state.may_cancel(1));
         assert!(state.end_export(1));
         assert!(state.may_cancel(1));
+    }
+
+    #[test]
+    fn the_shortcut_starts_a_capture_or_ends_the_open_one() {
+        let state = CaptureState::default();
+        assert_eq!(state.on_shortcut(), ShortcutPress::Start);
+        *state.session() = Some(session());
+        // A hung overlay page cannot take Escape; the OS-level shortcut still ends the capture.
+        assert_eq!(state.on_shortcut(), ShortcutPress::Cancel(1));
+        // Not under an open save panel, as for Escape.
+        state.begin_export(1, 1, REGION).unwrap();
+        assert_eq!(state.on_shortcut(), ShortcutPress::Ignore);
+        assert!(state.end_export(1));
+        assert_eq!(state.on_shortcut(), ShortcutPress::Cancel(1));
+        assert_eq!(state.end(1), Some(None));
+        assert_eq!(state.on_shortcut(), ShortcutPress::Start);
     }
 
     #[test]

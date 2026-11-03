@@ -1,9 +1,11 @@
 //! Menu bar (macOS) / system tray (Windows) icon and menu.
 
+use std::sync::Mutex;
+
 use tauri::{
     AppHandle, Manager, Wry,
     menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem},
-    tray::{TrayIconBuilder, TrayIconEvent},
+    tray::{MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 
 use crate::login_item;
@@ -56,7 +58,11 @@ fn menu(open_at_login: bool) -> Vec<Entry> {
 }
 
 /// The checkable **Open at Login** item, kept to show the OS's current state (ADR-033).
-struct OpenAtLoginItem(CheckMenuItem<Wry>);
+struct OpenAtLoginItem {
+    item: CheckMenuItem<Wry>,
+    /// Held during every `SMAppService` call, so a toggle and a refresh cannot interleave.
+    busy: Mutex<()>,
+}
 
 impl TrayAction {
     const ALL: [TrayAction; 6] = [
@@ -100,16 +106,21 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     for entry in self::menu(login_item::SUPPORTED) {
         match entry {
             Entry::Item(TrayAction::OpenAtLogin) => {
+                // Unchecked until the background read below reports the OS's state.
                 let item = CheckMenuItem::with_id(
                     app,
                     TrayAction::OpenAtLogin.id(),
                     TrayAction::OpenAtLogin.label(),
                     true,
-                    login_item::is_enabled(),
+                    false,
                     None::<&str>,
                 )?;
                 menu.append(&item)?;
-                app.manage(OpenAtLoginItem(item));
+                app.manage(OpenAtLoginItem {
+                    item,
+                    busy: Mutex::new(()),
+                });
+                refresh_open_at_login(app);
             }
             Entry::Item(action) => {
                 menu.append(&MenuItem::with_id(
@@ -134,7 +145,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         })
         // The user can also change the login item in System Settings; check again on every click.
         .on_tray_icon_event(|tray, event| {
-            if matches!(event, TrayIconEvent::Click { .. }) {
+            if refreshes_on(&event) {
                 refresh_open_at_login(tray.app_handle());
             }
         });
@@ -151,13 +162,55 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// A click sends one event when the button goes down and one when it comes up; one read is enough.
+fn refreshes_on(event: &TrayIconEvent) -> bool {
+    matches!(
+        event,
+        TrayIconEvent::Click {
+            button_state: MouseButtonState::Down,
+            ..
+        }
+    )
+}
+
 /// Shows the OS's current login item state, which a click on the item does not track by itself.
-pub fn refresh_open_at_login(app: &AppHandle) {
-    if let Some(item) = app.try_state::<OpenAtLoginItem>()
-        && let Err(err) = item.0.set_checked(login_item::is_enabled())
-    {
+/// Skipped while another login item call runs: that one ends by showing the state.
+fn refresh_open_at_login(app: &AppHandle) {
+    in_background(app, |item| {
+        let Ok(_busy) = item.busy.try_lock() else {
+            return;
+        };
+        show_open_at_login(item);
+    });
+}
+
+/// Turns opening at login on or off, then shows the resulting state.
+pub fn toggle_open_at_login(app: &AppHandle) {
+    in_background(app, |item| {
+        let _busy = item.busy.lock().unwrap_or_else(|e| e.into_inner());
+        if let Err(error) = login_item::set_enabled(!login_item::is_enabled()) {
+            eprintln!("[login item] {error}");
+        }
+        show_open_at_login(item);
+    });
+}
+
+fn show_open_at_login(item: &OpenAtLoginItem) {
+    if let Err(err) = item.item.set_checked(login_item::is_enabled()) {
         eprintln!("[tray] open at login: {err}");
     }
+}
+
+/// Every `SMAppService` call waits for a system daemon, which took up to half a second when idle
+/// and long enough under load to freeze the open tray menu, and with it the menu bar and Dock. So
+/// they run off the main thread; `set_checked` hands its update to the main thread itself.
+fn in_background(app: &AppHandle, work: impl FnOnce(&OpenAtLoginItem) + Send + 'static) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        if let Some(item) = app.try_state::<OpenAtLoginItem>() {
+            work(&item);
+        }
+    });
 }
 
 /// Decodes an 8-bit RGBA PNG with the `png` crate already used for export, rather than enabling
@@ -189,7 +242,7 @@ fn decode_rgba(bytes: &[u8]) -> Result<tauri::image::Image<'static>, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{EXIT_LABEL, Entry, TEMPLATE_ICON, TrayAction, decode_rgba, menu};
+    use super::{EXIT_LABEL, Entry, TEMPLATE_ICON, TrayAction, decode_rgba, menu, refreshes_on};
 
     fn labels(entries: &[Entry]) -> Vec<&'static str> {
         entries
@@ -258,6 +311,36 @@ mod tests {
     #[test]
     fn about_item_maps_to_about_action() {
         assert_eq!(TrayAction::from_id("about"), Some(TrayAction::About));
+    }
+
+    #[test]
+    fn a_click_reads_the_login_item_state_once() {
+        use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent, TrayIconId};
+        let click = |button, button_state| TrayIconEvent::Click {
+            id: TrayIconId::new("main"),
+            position: tauri::PhysicalPosition::default(),
+            rect: tauri::Rect::default(),
+            button,
+            button_state,
+        };
+        assert!(refreshes_on(&click(
+            MouseButton::Left,
+            MouseButtonState::Down
+        )));
+        assert!(refreshes_on(&click(
+            MouseButton::Right,
+            MouseButtonState::Down
+        )));
+        assert!(!refreshes_on(&click(
+            MouseButton::Left,
+            MouseButtonState::Up
+        )));
+        let hover = TrayIconEvent::Enter {
+            id: TrayIconId::new("main"),
+            position: tauri::PhysicalPosition::default(),
+            rect: tauri::Rect::default(),
+        };
+        assert!(!refreshes_on(&hover));
     }
 
     #[test]

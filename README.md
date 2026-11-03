@@ -196,6 +196,7 @@ General › Login Items, where you can also turn it off.
 | Shortcut                                                       | Action                                                 |
 | -------------------------------------------------------------- | ------------------------------------------------------ |
 | <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>2</kbd>                   | Start a capture (anywhere; can be changed, see below)  |
+| <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>2</kbd> again             | Cancel the open capture, as <kbd>Esc</kbd> does        |
 | <kbd>Return</kbd> or <kbd>Cmd</kbd>+<kbd>C</kbd>               | Copy the region to the clipboard and close             |
 | <kbd>Cmd</kbd>+<kbd>S</kbd>                                    | Save the region as PNG                                 |
 | <kbd>Cmd</kbd>+<kbd>Z</kbd>                                    | Undo                                                   |

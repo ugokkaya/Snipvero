@@ -90,7 +90,7 @@ pub fn plugin() -> TauriPlugin<Wry> {
         .with_handler(|app, _shortcut, event| {
             // Only one shortcut is registered; react on key down, not on release.
             if event.state() == ShortcutState::Pressed {
-                crate::overlay::start(app);
+                crate::overlay::start_or_cancel(app);
             }
         })
         .build()
