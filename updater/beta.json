@@ -1,11 +1,11 @@
 {
-  "version": "0.1.0-beta.5",
-  "notes": "This beta adds Open at Login, so the capture shortcut works as soon as you log in. Snipvero then starts quietly in the menu bar, without opening its window.\n\nFull release notes: https://github.com/ugokkaya/Snipvero/releases/tag/v0.1.0-beta.5",
-  "pub_date": "2026-11-01T20:05:44Z",
+  "version": "0.1.0-beta.6",
+  "notes": "This beta fixes a freeze of the menu bar and Dock after clicking Snipvero's menu bar icon, and lets the capture shortcut cancel a capture.\n\nFull release notes: https://github.com/ugokkaya/Snipvero/releases/tag/v0.1.0-beta.6",
+  "pub_date": "2026-11-03T14:14:15Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSZjFuUnFqbXRHOUVNYWJoRUQ3Q3dLQVBOWjUyNy85MStvRk50VFI5OUQzcW1kUURIUlA3Z0c1NGVRMEJGVzJzN0pUK3RuZ2xGN2tCaUxrVVJ1OElEZlNJMGVmWEtacUFjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNTYzNTQ0CWZpbGU6U25pcHZlcm9fMC4xLjAtYmV0YS41X2FhcmNoNjQuYXBwLnRhci5negl2ZXJzaW9uOjAuMS4wLWJldGEuNQpyLzNGLzM5MFMyV2NLcm9XcW0zWjR2RTE1WFRDdlFJRkFKendMV0RraDZ3VUJqditkZm00N0xVdG1SWkZ4VURnaDhsRVJQUGlZVWtmbVdCdUhTcytCZz09Cg==",
-      "url": "https://github.com/ugokkaya/Snipvero/releases/download/v0.1.0-beta.5/Snipvero_0.1.0-beta.5_aarch64.app.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSZjFuUnFqbXRHOUl4UkdpMFNXMzZjRWxZamcyL2dvMk1rVEpuVFJ4dXUyZU91SmFUQ1l2R1VkQndUajFyUDJLaXBpUFpuc3d5NWZzajBmc044REtJcUdmU2UyakJiUmd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNzE1MjU1CWZpbGU6U25pcHZlcm9fMC4xLjAtYmV0YS42X2FhcmNoNjQuYXBwLnRhci5negl2ZXJzaW9uOjAuMS4wLWJldGEuNgpMamN0aGIwNXVreUVUc2drZlFqRUM2UFRidTFaUXN4MHF0aXBUeWpGbThDVzM2WW5VbEZkdzRaVE9pVmFBNnRyQ1F0SmZGeU9LbDBHTTJoM3ZtVFhCZz09Cg==",
+      "url": "https://github.com/ugokkaya/Snipvero/releases/download/v0.1.0-beta.6/Snipvero_0.1.0-beta.6_aarch64.app.tar.gz"
     }
   }
 }
