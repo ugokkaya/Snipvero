@@ -23,7 +23,8 @@ test("GHSA-p4f5-76q4-ffq7 cannot add an outside file to the serving allowlist", 
     const address = server.httpServer.address();
     assert.ok(address && typeof address === "object");
     const base = `http://127.0.0.1:${address.port}`;
-    const fileUrl = `/@fs${canary.replaceAll("\\", "/")}`;
+    // /@fs/ prefixes both POSIX paths and Windows drive-letter paths.
+    const fileUrl = `/@fs/${canary.replaceAll("\\", "/").replace(/^\/+/, "")}`;
     assert.equal((await fetch(base + fileUrl)).status, 403);
 
     // The advisory's file-read PoC, confined to a disposable file owned by this test.
