@@ -1685,7 +1685,7 @@ react-reconciler 0.34.0
   Source: https://github.com/react/react.git
   License text: [174]
 
-rolldown 1.2.15
+rolldown 1.2.18
   License: MIT
   Source: git+https://github.com/rolldown/rolldown.git
   License text: [176]
@@ -1695,7 +1695,7 @@ scheduler 0.28.0
   Source: https://github.com/react/react.git
   License text: [174]
 
-vite 8.3.5
+vite 8.3.7
   License: MIT
   Source: git+https://github.com/vitejs/vite.git
   License text: [177]
@@ -8432,7 +8432,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----- [176] -----
-Used by: rolldown 1.2.15
+Used by: rolldown 1.2.18
 
 MIT License
 
@@ -8461,7 +8461,7 @@ end of terms and conditions
 The licenses of externally maintained libraries from which parts of the Software is derived are listed [here](https://github.com/rolldown/rolldown/blob/main/THIRD-PARTY-LICENSE).
 
 ----- [177] -----
-Used by: vite 8.3.5
+Used by: vite 8.3.7
 
 # Vite core license
 Vite is released under the MIT license:

@@ -1,7 +1,7 @@
 {
   "name": "snipvero",
   "private": true,
-  "version": "0.1.0-beta.6",
+  "version": "0.1.0-beta.7",
   "description": "Open-source screenshot and annotation tool for macOS.",
   "license": "MIT",
   "type": "module",
@@ -47,7 +47,7 @@
     "prettier": "^3.9.10",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.72.1",
-    "vite": "^8.3.5",
+    "vite": "^8.3.7",
     "vitest": "^5.0.5"
   }
 }

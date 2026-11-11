@@ -59,6 +59,13 @@ The full list is in [AGENTS.md](AGENTS.md#engineering-rules). The most important
 
 ## Security
 
+Keep development dependencies current and leave the Vite development server local-only unless
+network access is needed. `TAURI_DEV_HOST` and Vite's `--host` can expose it to other machines.
+Beta 7 updates Vite/Rolldown for
+[GHSA-p4f5-76q4-ffq7](https://github.com/vitejs/vite/security/advisories/GHSA-p4f5-76q4-ffq7);
+contributors on earlier source versions should update and run `pnpm install`. Installed desktop
+apps do not run the development server and are not affected by this advisory.
+
 Please report security problems privately to the maintainer through GitHub (the repository's
 **Security** tab, if private reporting is enabled) rather than in a public issue.
 
