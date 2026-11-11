@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { createServer } from "vite";
 
 test("GHSA-p4f5-76q4-ffq7 cannot add an outside file to the serving allowlist", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "snipvero-vite-security-"));
+  // Vite serves /@fs/ from the process's drive on Windows; CI's OS temp can be on another drive.
+  const directory = await mkdtemp(join(process.cwd(), ".snipvero-vite-security-"));
   let server;
   try {
     const root = join(directory, "project");
