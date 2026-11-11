@@ -29,7 +29,8 @@ test("GHSA-p4f5-76q4-ffq7 cannot add an outside file to the serving allowlist", 
 
     // The advisory's file-read PoC, confined to a disposable file owned by this test.
     const payload = `__vite-browser-external:\`);}});\nimport '${fileUrl}';\nvar z=new Proxy({}, {get(_, key) {throw new Error(\``;
-    const response = await fetch(`${base}/@id/${encodeURIComponent(payload)}?import`);
+    // Vite decodes URI paths, not URI components; keep the import's slashes and colon intact.
+    const response = await fetch(`${base}/@id/${encodeURI(payload)}?import`);
     await response.text();
     const after = await fetch(base + fileUrl);
     assert.equal(after.status, 403);
