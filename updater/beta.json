@@ -1,11 +1,11 @@
 {
-  "version": "0.1.0-beta.6",
-  "notes": "This beta fixes a freeze of the menu bar and Dock after clicking Snipvero's menu bar icon, and lets the capture shortcut cancel a capture.\n\nFull release notes: https://github.com/ugokkaya/Snipvero/releases/tag/v0.1.0-beta.6",
-  "pub_date": "2026-11-03T14:14:15Z",
+  "version": "0.1.0-beta.7",
+  "notes": "This maintenance beta updates the development toolchain for GHSA-p4f5-76q4-ffq7. Installed desktop apps are not affected by this development-server vulnerability.\n\nFull release notes: https://github.com/ugokkaya/Snipvero/releases/tag/v0.1.0-beta.7",
+  "pub_date": "2026-11-13T10:39:12Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSZjFuUnFqbXRHOUl4UkdpMFNXMzZjRWxZamcyL2dvMk1rVEpuVFJ4dXUyZU91SmFUQ1l2R1VkQndUajFyUDJLaXBpUFpuc3d5NWZzajBmc044REtJcUdmU2UyakJiUmd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNzE1MjU1CWZpbGU6U25pcHZlcm9fMC4xLjAtYmV0YS42X2FhcmNoNjQuYXBwLnRhci5negl2ZXJzaW9uOjAuMS4wLWJldGEuNgpMamN0aGIwNXVreUVUc2drZlFqRUM2UFRidTFaUXN4MHF0aXBUeWpGbThDVzM2WW5VbEZkdzRaVE9pVmFBNnRyQ1F0SmZGeU9LbDBHTTJoM3ZtVFhCZz09Cg==",
-      "url": "https://github.com/ugokkaya/Snipvero/releases/download/v0.1.0-beta.6/Snipvero_0.1.0-beta.6_aarch64.app.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSZjFuUnFqbXRHOUQ0eUhya3NLdHRyNkdCVEZWanVnSWtqODZMRjhQZjlCQ21sMUlWbk5sZTZwdkRTcUExRmdUakZQMjdwZXNkVDl5a2hueHZJbmlFZFZMWlp5QlJ2YkFBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NTY2MzUyCWZpbGU6U25pcHZlcm9fMC4xLjAtYmV0YS43X2FhcmNoNjQuYXBwLnRhci5negl2ZXJzaW9uOjAuMS4wLWJldGEuNwpBTG5jUGhXeTIrNkZUSVcwbXhKMGRDSERoamd1VkdOZ1hpUkVLa1NxMXl4ZlZHR2lHTXg5dVR6ZWVGTHdJOW5iTFQ5cjNUQ2lqQ2kyNlNQTlJjNGxDQT09Cg==",
+      "url": "https://github.com/ugokkaya/Snipvero/releases/download/v0.1.0-beta.7/Snipvero_0.1.0-beta.7_aarch64.app.tar.gz"
     }
   }
 }
