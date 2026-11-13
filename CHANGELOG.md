@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.1.0-beta.7 — 2026-11-11
+
+### Security
+
+- Update Vite to 8.3.7 and Rolldown to 1.2.18 to address
+  [GHSA-p4f5-76q4-ffq7](https://github.com/vitejs/vite/security/advisories/GHSA-p4f5-76q4-ffq7).
+  A network-exposed development server could allow arbitrary file reads and code execution.
+  The default development configuration is local-only; setting `TAURI_DEV_HOST` to a network
+  address or using `--host` can expose it. Published desktop apps do not run a Vite server and
+  are not affected. Contributors should update their checkout and run `pnpm install`.
+
 ## 0.1.0-beta.6 — 2026-11-03
 
 ### Fixed
