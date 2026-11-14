@@ -1,6 +1,6 @@
 [package]
 name = "snipvero"
-version = "0.1.0-beta.7"
+version = "0.1.0-beta.8"
 description = "Open-source screenshot and annotation tool for macOS."
 authors = ["Snipvero contributors"]
 license = "MIT"
@@ -38,7 +38,7 @@ rfd = { version = "0.17", default-features = false }
 block2 = "0.6"
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "NSAppleEventDescriptor", "NSAppleEventManager", "NSArray", "NSData", "NSError", "NSGeometry", "NSNotification", "NSOperation", "NSString", "NSURL"] }
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "libc", "NSApplication", "NSBitmapImageRep", "NSGraphics", "NSImageRep", "NSPasteboard", "NSPasteboardItem", "NSResponder", "NSRunningApplication", "NSScreen", "NSWindow", "NSWorkspace"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "libc", "NSApplication", "NSBitmapImageRep", "NSBox", "NSColor", "NSControl", "NSFont", "NSGraphics", "NSImageRep", "NSPanel", "NSPasteboard", "NSPasteboardItem", "NSResponder", "NSRunningApplication", "NSScreen", "NSText", "NSTextField", "NSView", "NSWindow", "NSWorkspace"] }
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFCGTypes", "CFData"] }
 objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGDataProvider", "CGEvent", "CGEventTypes", "CGImage", "CGWindow"] }
 objc2-screen-capture-kit = { version = "0.3", default-features = false, features = [

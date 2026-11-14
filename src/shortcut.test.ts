@@ -50,6 +50,16 @@ describe("acceleratorFromKey", () => {
   it("passes other keys on for Rust to judge", () => {
     expect(acceleratorFromKey(press("KeyC", { meta: true }), "macos")).toBe("CommandOrControl+C");
   });
+
+  it("records Print Screen alone without adding modifiers", () => {
+    for (const platform of ["macos", "windows"] as const) {
+      expect(acceleratorFromKey(press("PrintScreen"), platform)).toBe("PrintScreen");
+    }
+  });
+
+  it("keeps a Mac keyboard's F13 physical code instead of remapping it to PrintScreen", () => {
+    expect(acceleratorFromKey(press("F13"), "macos")).toBe("F13");
+  });
 });
 
 describe("isCancel", () => {
@@ -62,10 +72,16 @@ describe("isCancel", () => {
 
 describe("rejectionMessage", () => {
   it("words every rejection Rust can send, per platform", () => {
+    expect(rejectionMessage("modifiers", "macos")).toContain("Print Screen as F13");
+    expect(rejectionMessage("modifiers", "windows")).not.toContain("F13 is also allowed");
     for (const rejection of SHORTCUT_REJECTIONS) {
       expect(rejectionMessage(rejection, "macos")).not.toBe("");
     }
     expect(rejectionMessage("modifiers", "macos")).toContain("⌘⇧");
     expect(rejectionMessage("modifiers", "windows")).toContain("Ctrl+Shift");
+    expect(rejectionMessage("modifiers", "macos")).toContain("Print Screen can be used on its own");
+    expect(rejectionMessage("modifiers", "windows")).toContain(
+      "Print Screen can be used on its own",
+    );
   });
 });

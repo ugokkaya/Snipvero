@@ -53,7 +53,7 @@ export function rejectionMessage(rejection: ShortcutRejection, platform: Platfor
   const example = platform === "macos" ? "⌘⇧ or ⌃⌥" : "Ctrl+Shift or Ctrl+Alt";
   switch (rejection) {
     case "modifiers":
-      return `Use two modifier keys, such as ${example}, so other apps keep their own shortcuts. With a function key (F1–F24), one is enough.`;
+      return `Use two modifier keys, such as ${example}, so other apps keep their own shortcuts. With a function key (F1–F24), one is enough. Print Screen can be used on its own.${platform === "macos" ? " F13 is also allowed on its own, since some Mac keyboards report Print Screen as F13." : ""}`;
     case "reserved":
       return "The system or most apps use that combination. Choose another one.";
     case "unavailable":

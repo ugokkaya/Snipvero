@@ -28,6 +28,7 @@ export interface FrameInfo {
   width: number;
   height: number;
   focused: boolean;
+  region: Rect | null;
 }
 
 export interface ShortcutStatus {
@@ -71,6 +72,10 @@ export const overlayReady = (session: number) => invoke("overlay_ready", { sessi
  */
 export const overlaySelect = (session: number, region: Rect | null) =>
   invoke("overlay_select", { session, region });
+
+/** Hide the overlays, then read fresh pixels of the same region after five seconds. */
+export const overlayCaptureDelayed = (session: number, region: Rect) =>
+  invoke("overlay_capture_delayed", { session, region });
 
 /**
  * Ends capture `session` (Escape). Resolves false when that capture already ended or an export

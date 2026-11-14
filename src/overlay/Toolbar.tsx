@@ -8,7 +8,7 @@ const BUTTON = 28;
 const GAP = 2;
 const PADDING = 4;
 const SEPARATOR = 7;
-const BUTTONS = 4 + COLORS.length + 3 + 3 + 2;
+const BUTTONS = 4 + COLORS.length + 3 + 3 + 3;
 const SEPARATORS = 4;
 
 export const TOOLBAR_SIZE: Size = {
@@ -48,6 +48,7 @@ interface Props {
   keys: { undo: string; redo: string; copy: string; save: string };
   send: (action: EditorAction) => void;
   onExport: (action: "copy" | "save") => void;
+  onCaptureDelayed: () => void;
 }
 
 /** Floating annotation toolbar next to the selection (FR-4). */
@@ -142,6 +143,18 @@ export function Toolbar(props: Props) {
         { disabled: !canDelete },
       )}
       <span className="toolbar-separator" />
+      {button(
+        "delayed",
+        "Capture this region again in 5 seconds (clears annotations)",
+        icon(
+          <>
+            <circle cx="8" cy="9" r="5.5" />
+            <path d="M8 5.5V9l2 1.5M6 1h4M8 1v2" />
+          </>,
+        ),
+        props.onCaptureDelayed,
+        { disabled: !canExport },
+      )}
       {button(
         "copy",
         `Copy to clipboard (${keys.copy})`,

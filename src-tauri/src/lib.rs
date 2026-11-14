@@ -35,6 +35,7 @@ pub fn run() {
             overlay::overlay_frame,
             overlay::overlay_ready,
             overlay::overlay_select,
+            overlay::delayed::overlay_capture_delayed,
             overlay::overlay_cancel,
             export::overlay_copy,
             export::overlay_save,

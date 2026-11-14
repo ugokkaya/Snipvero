@@ -45,6 +45,23 @@ const annotated = gesture(
   { x: 250, y: 200 },
 );
 
+describe("loading a fresh capture", () => {
+  it("restores the region in physical pixels and discards the old annotation history", () => {
+    const region = { x: 200, y: 100, width: 600, height: 400 };
+    const next = reduceEditor(annotated, { type: "loadFrame", region }, ENV);
+    expect(exportableRegion(next)).toEqual(region);
+    expect(next.origin).toEqual({ x: 200, y: 100 });
+    expect(next.annotate).toEqual(INITIAL_EDITOR.annotate);
+  });
+
+  it("resets other displays and can load after a cancellation", () => {
+    const cancelled = reduceEditor(annotated, { type: "cancel" }, ENV);
+    expect(reduceEditor(cancelled, { type: "loadFrame", region: null }, ENV)).toEqual(
+      INITIAL_EDITOR,
+    );
+  });
+});
+
 describe("annotation coordinates", () => {
   it("are relative to the selected region", () => {
     expect(annotated.origin).toEqual({ x: 100, y: 100 });

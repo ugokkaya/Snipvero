@@ -60,6 +60,38 @@ impl PixelRect {
     }
 }
 
+/// Local logical rectangles for the delayed-capture border and badge. The badge prefers the
+/// space above the selection, but must stay visible even at an edge or on a tiny selection.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub fn countdown_layout(
+    region: PixelRect,
+    bounds: LogicalRect,
+    frame: (u32, u32),
+) -> (LogicalRect, LogicalRect) {
+    let desktop = region.to_logical(bounds, frame);
+    let border = LogicalRect {
+        x: desktop.x - bounds.x,
+        y: desktop.y - bounds.y,
+        ..desktop
+    };
+    let width = 112.0_f64.min(bounds.width);
+    let height = 28.0_f64.min(bounds.height);
+    let y = if border.y >= height + 6.0 {
+        border.y - height - 6.0
+    } else if border.y + border.height + 6.0 + height <= bounds.height {
+        border.y + border.height + 6.0
+    } else {
+        border.y
+    };
+    let badge = LogicalRect {
+        x: border.x.clamp(0.0, bounds.width - width),
+        y: y.clamp(0.0, bounds.height - height),
+        width,
+        height,
+    };
+    (border, badge)
+}
+
 /// Pixel size of a logical size at `scale`. Rounds to absorb float error from fractional scales
 /// (for example 1706.67 pt × 1.5 = 2560 px).
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
@@ -158,5 +190,83 @@ mod tests {
         assert_eq!(BUILT_IN.cocoa_y(982.0), 0.0);
         // A 1080-pt display top-aligned with a 982-pt primary extends 98 pt below it.
         assert_eq!(LEFT.cocoa_y(982.0), -98.0);
+    }
+
+    #[test]
+    fn countdown_tracks_frame_pixels_on_retina_and_negative_displays() {
+        let region = PixelRect {
+            x: 200,
+            y: 100,
+            width: 400,
+            height: 300,
+        };
+        let (border, badge) = countdown_layout(region, BUILT_IN, (3024, 1964));
+        assert_eq!(
+            border,
+            LogicalRect {
+                x: 100.0,
+                y: 50.0,
+                width: 200.0,
+                height: 150.0
+            }
+        );
+        assert_eq!((badge.x, badge.y), (100.0, 16.0));
+        let (border, badge) = countdown_layout(region, LEFT, (1920, 1080));
+        assert_eq!((border.x, border.y, border.width), (200.0, 100.0, 400.0));
+        assert_eq!((badge.x, badge.y), (200.0, 66.0));
+    }
+
+    #[test]
+    fn countdown_badge_stays_on_screen_at_edges_and_for_fullscreen_regions() {
+        for region in [
+            PixelRect {
+                x: 3023,
+                y: 0,
+                width: 1,
+                height: 1,
+            },
+            PixelRect {
+                x: 0,
+                y: 0,
+                width: 3024,
+                height: 1964,
+            },
+            PixelRect {
+                x: 3023,
+                y: 1963,
+                width: 1,
+                height: 1,
+            },
+        ] {
+            let (_, badge) = countdown_layout(region, BUILT_IN, (3024, 1964));
+            assert!(badge.x >= 0.0 && badge.y >= 0.0);
+            assert!(badge.x + badge.width <= BUILT_IN.width);
+            assert!(badge.y + badge.height <= BUILT_IN.height);
+        }
+        let tiny = LogicalRect {
+            x: -10.0,
+            y: -10.0,
+            width: 20.0,
+            height: 20.0,
+        };
+        let (_, badge) = countdown_layout(
+            PixelRect {
+                x: 0,
+                y: 0,
+                width: 20,
+                height: 20,
+            },
+            tiny,
+            (20, 20),
+        );
+        assert_eq!(
+            badge,
+            LogicalRect {
+                x: 0.0,
+                y: 0.0,
+                width: 20.0,
+                height: 20.0
+            }
+        );
     }
 }

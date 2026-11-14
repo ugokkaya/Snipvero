@@ -49,7 +49,9 @@ export interface EditorEnv {
 
 /** Toolbar and keyboard actions; pointer actions and clear/cancel come from `SelectionAction`. */
 export type EditorAction =
-  SelectionAction | Exclude<AnnotateAction, { type: "press" | "drag" | "release" | "rebase" }>;
+  | { type: "loadFrame"; region: Rect | null }
+  | SelectionAction
+  | Exclude<AnnotateAction, { type: "press" | "drag" | "release" | "rebase" }>;
 
 export const INITIAL_EDITOR: EditorState = {
   selection: IDLE,
@@ -127,6 +129,13 @@ export function reduceEditor(
   action: EditorAction,
   env: EditorEnv,
 ): EditorState {
+  if (action.type === "loadFrame") {
+    return {
+      ...INITIAL_EDITOR,
+      selection: action.region ? { phase: "selected", rect: action.region } : IDLE,
+      origin: action.region ? { x: action.region.x, y: action.region.y } : { x: 0, y: 0 },
+    };
+  }
   if (state.selection.phase === "cancelled") return state;
   const region = selectedRegion(state.selection);
   switch (action.type) {
