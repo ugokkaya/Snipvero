@@ -1,11 +1,11 @@
 {
-  "version": "0.1.0-beta.7",
-  "notes": "This maintenance beta updates the development toolchain for GHSA-p4f5-76q4-ffq7. Installed desktop apps are not affected by this development-server vulnerability.\n\nFull release notes: https://github.com/ugokkaya/Snipvero/releases/tag/v0.1.0-beta.7",
-  "pub_date": "2026-11-13T10:39:12Z",
+  "version": "0.1.0-beta.8",
+  "notes": "Capture dropdowns and other temporary UI with a five-second region timer. Print Screen can now be assigned on its own, including keyboards that send it as F13 on macOS.\n\nFull release notes: https://github.com/ugokkaya/Snipvero/releases/tag/v0.1.0-beta.8",
+  "pub_date": "2026-11-14T22:01:25Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSZjFuUnFqbXRHOUQ0eUhya3NLdHRyNkdCVEZWanVnSWtqODZMRjhQZjlCQ21sMUlWbk5sZTZwdkRTcUExRmdUakZQMjdwZXNkVDl5a2hueHZJbmlFZFZMWlp5QlJ2YkFBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NTY2MzUyCWZpbGU6U25pcHZlcm9fMC4xLjAtYmV0YS43X2FhcmNoNjQuYXBwLnRhci5negl2ZXJzaW9uOjAuMS4wLWJldGEuNwpBTG5jUGhXeTIrNkZUSVcwbXhKMGRDSERoamd1VkdOZ1hpUkVLa1NxMXl4ZlZHR2lHTXg5dVR6ZWVGTHdJOW5iTFQ5cjNUQ2lqQ2kyNlNQTlJjNGxDQT09Cg==",
-      "url": "https://github.com/ugokkaya/Snipvero/releases/download/v0.1.0-beta.7/Snipvero_0.1.0-beta.7_aarch64.app.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSZjFuUnFqbXRHOUM5K0xjSll6bnJMbkpzNjJpKzhwSHdMQUNHa2dDNCtSSXBKQ2dON1FhL1NOeFZ3QnpuSmFUSU5uS2lFZjRPWHJPVFhlek5XWDZYbnVVck5WSmJCR3dJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NjkzNjg1CWZpbGU6U25pcHZlcm9fMC4xLjAtYmV0YS44X2FhcmNoNjQuYXBwLnRhci5negl2ZXJzaW9uOjAuMS4wLWJldGEuOApRRjNkOGdHendyU3dwem5NRjhZUlc4eEdwekZ5UXRiMFowUUFWNDBjWEYwVTJGdWtXYTFDTVVFYkNmY0t6WEVTU2t5QVIwU2tiUTBsMlBNWXpTeEJBdz09Cg==",
+      "url": "https://github.com/ugokkaya/Snipvero/releases/download/v0.1.0-beta.8/Snipvero_0.1.0-beta.8_aarch64.app.tar.gz"
     }
   }
 }
