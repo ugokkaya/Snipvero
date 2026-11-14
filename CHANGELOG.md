@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.1.0-beta.9 — 2026-11-15
+
+### Fixed
+
+- Show reliable in-app tooltips for every capture toolbar button, including disabled actions.
+  Hover to see the tool name and available keyboard shortcut. Labels wrap and stay within the
+  display, disappear when leaving or pressing a button, and do not intercept drawing input.
+
 ## 0.1.0-beta.8 — 2026-11-15
 
 ### Fixed

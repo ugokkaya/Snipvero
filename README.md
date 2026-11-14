@@ -204,6 +204,8 @@ would otherwise attribute the permission to the terminal app.
 2. Drag to select a region. Drag inside it to move it, or drag a handle to resize it.
 3. Pick a tool in the toolbar below the region and draw. Choose **Select and move** (or click the
    active tool again) to move, resize or delete annotations.
+   In source builds, hover over any toolbar button to see its name and available keyboard shortcut,
+   including disabled actions.
 4. Copy or save. Press <kbd>Esc</kbd> to leave without doing either.
 
 You can also start a capture with **Capture Region** in the Snipvero window. Closing the window
