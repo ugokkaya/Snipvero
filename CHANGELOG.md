@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 0.1.0-beta.8 — 2026-11-15
+
+### Fixed
+
+- Allow Print Screen alone as the capture shortcut, without requiring modifier keys. Other keys
+  keep their existing modifier requirements. The OS or keyboard software may still intercept the key.
+- Accept bare F13 on macOS too: some keyboards send their Print Screen key as F13. Keep the
+  physical F13 code when registering, rather than remapping to a different native key.
+
+### Added
+
+- Five-second recapture from the region toolbar: select an area, click the timer, then open a
+  dropdown while the capture screen is hidden. Fresh pixels are read before Snipvero takes focus;
+  the same region reopens for editing with old annotations cleared. The capture shortcut cancels
+  the wait. Display changes end the capture rather than moving the region to another display.
+- A click-through blinking region border and five-second countdown show where and when the delayed
+  capture will happen, without taking focus from the app. Both disappear before capture.
+
 ## 0.1.0-beta.7 — 2026-11-11
 
 ### Security

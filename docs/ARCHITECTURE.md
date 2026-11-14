@@ -64,8 +64,11 @@ src-tauri/
   src/capture/macos.rs        ScreenCaptureKit backend
   src/overlay/mod.rs          capture session state (incl. the one selection), overlay windows, overlay commands,
                               readiness watchdog, display-change handling (ADR-019)
-  src/overlay/macos.rs        window level / Spaces behaviour (lowered during the save dialog), cursor location,
-                              display-change observer and current display bounds
+   src/overlay/macos.rs        window level / Spaces behaviour (lowered during the save dialog), cursor location,
+                               display-change observer and current display bounds
+   src/overlay/delayed.rs      five-second recapture: hide, restore focus, read fresh pixels, validate display,
+                               reload the editor with the same region and a new session ID (ADR-035)
+   src/overlay/macos/countdown.rs  native nonactivating, click-through countdown panel and blinking border
   src/export/mod.rs           crop + blend + PNG, request validation, overlay_copy / overlay_save, save dialog
   src/export/macos.rs         NSPasteboard (PNG + TIFF)
   src/export/windows.rs       clipboard via arboard (CI-tested only)
@@ -135,6 +138,18 @@ display bounds changed (`NSApplicationDidChangeScreenParametersNotification`, ch
 captured bounds because AppKit also posts it without a change; ignored during an export).
 
 Toolbar and annotation input stay in the page (editor reducer); no IPC while drawing.
+
+**Delayed region capture (FR-17):** the toolbar calls `overlay_capture_delayed(session, region)`.
+Rust validates the region and refuses during export or another delay. It keeps the capture/update
+lock, hides all overlays and restores the previous app. A native nonactivating transparent panel
+shows a blinking border and countdown without intercepting input. Worker ticks use elapsed monotonic
+time; AppKit updates run on the main thread. After five seconds, the worker waits for the main thread
+to hide the indicator before capturing all displays without focusing any Snipvero window. On the main thread, only if the original
+session is still active, it validates the selected display's ID, bounds, pixel dimensions and scale,
+then replaces the session with a new ID and emits `overlay-load`. `FrameInfo.region` restores the
+selection on that display; `loadFrame` resets the editor and all annotation/undo state. Existing
+hidden windows are reused for this reload; normal cancellation/export still destroys them. Shortcut
+cancellation works throughout the wait and capture; a late worker cannot replace a newer session.
 
 ```
 Copy / Save     ─▶ commit a text being edited; exporter refuses a second request

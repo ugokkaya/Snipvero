@@ -17,6 +17,10 @@ check for updates.
 - **Instant capture** from a global shortcut (<kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>2</kbd>) or the
   menu bar icon. All displays freeze together, so nothing moves while you select.
   Change the shortcut from the main window's **Global shortcut** row; it is kept across restarts.
+  The source checkout also accepts **Print Screen** on its own (not yet in Beta 7); the OS or
+  keyboard software must deliver that key to Snipvero rather than intercepting it.
+  On macOS, keyboards that send Print Screen as **F13** can assign F13 alone too; the shortcut is
+  displayed and saved as F13 to match the physical key the keyboard sends.
 - **Region selection** on any display: drag in any direction, then move the region or resize it
   from eight handles. A live label shows its size in pixels.
 - **Annotations:** arrows, outlined rectangles and text in six colours and three sizes. Select,
@@ -28,6 +32,17 @@ check for updates.
   panel. Afterwards focus returns to the app you were using.
 - **Light footprint:** a menu bar app with no Dock icon, built on Tauri and the system web view.
   Turn on **Open at Login** in the menu bar to have it ready whenever you log in.
+
+### In development: delayed region capture
+
+The source checkout includes a five-second timer (not yet in the published Beta 7). Select a region,
+then click the **timer** in its toolbar. Snipvero hides the capture screen and returns focus to the
+previous app. A gently blinking border keeps your region visible, with a **5 → 1** countdown beside
+it. The indicator lets clicks through to the app and disappears before the screenshot is taken.
+Open your dropdown during the five seconds; Snipvero reads the new screenshot before
+taking focus again. The editor reopens with the same region, ready to annotate, copy or save.
+Earlier annotations are cleared. Press your capture shortcut again to cancel while waiting.
+Disconnecting/rearranging the displays or changing the selected display's resolution cancels the capture.
 
 ## Screenshots
 

@@ -133,6 +133,8 @@ fn same_keys(a: &Shortcut, b: &Shortcut) -> bool {
 /// Whether `accelerator` may become the capture shortcut. It needs Command/Control/Option (Alt)
 /// and, except on F1–F24, a second modifier: one-modifier combinations are what apps use for
 /// their own commands, and Option+key types characters on macOS.
+/// Print Screen alone (also F13 on macOS keyboards that send it that way) is an explicit
+/// exception for the dedicated screenshot key (ADR-036).
 pub fn validate(accelerator: &str) -> Result<Shortcut, Rejection> {
     let shortcut: Shortcut = accelerator.parse().map_err(|_| Rejection::Invalid)?;
     let modifiers = [
@@ -146,7 +148,10 @@ pub fn validate(accelerator: &str) -> Result<Shortcut, Rejection> {
         .filter(|m| shortcut.mods.contains(**m))
         .count();
     let needed = if is_function_key(shortcut.key) { 1 } else { 2 };
-    if shortcut.mods == Modifiers::SHIFT || held < needed {
+    let bare_capture_key = shortcut.mods.is_empty()
+        && (shortcut.key == Code::PrintScreen
+            || (cfg!(target_os = "macos") && shortcut.key == Code::F13));
+    if !bare_capture_key && (shortcut.mods == Modifiers::SHIFT || held < needed) {
         return Err(Rejection::Modifiers);
     }
     let reserved = RESERVED
@@ -338,6 +343,27 @@ mod tests {
     }
 
     #[test]
+    fn accepts_print_screen_alone_without_relaxing_other_shortcuts() {
+        let shortcut = validate("PrintScreen").unwrap();
+        assert_eq!(shortcut.key, Code::PrintScreen);
+        assert!(shortcut.mods.is_empty());
+        for rejected in [
+            "Shift+PrintScreen",
+            "Control+PrintScreen",
+            "Space",
+            "Enter",
+            "F12",
+        ] {
+            assert_eq!(
+                validate(rejected).err(),
+                Some(Rejection::Modifiers),
+                "{rejected}"
+            );
+        }
+        assert!(validate("Control+Shift+PrintScreen").is_ok());
+    }
+
+    #[test]
     fn rejects_combinations_apps_need() {
         for (accelerator, reason) in [
             ("", Rejection::Invalid),
@@ -350,6 +376,20 @@ mod tests {
             ("CommandOrControl+Shift+Z", Rejection::Reserved),
         ] {
             assert_eq!(validate(accelerator).err(), Some(reason), "{accelerator:?}");
+        }
+    }
+
+    #[test]
+    fn macos_print_screen_reported_as_f13_keeps_its_physical_key() {
+        if cfg!(target_os = "macos") {
+            let shortcut = validate("F13").unwrap();
+            assert_eq!(shortcut.key, Code::F13);
+            assert!(shortcut.mods.is_empty());
+        } else {
+            assert_eq!(validate("F13").err(), Some(Rejection::Modifiers));
+        }
+        for key in ["F1", "F12", "F14", "F24", "Shift+F13"] {
+            assert_eq!(validate(key).err(), Some(Rejection::Modifiers), "{key}");
         }
     }
 

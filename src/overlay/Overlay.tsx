@@ -14,6 +14,7 @@ import {
   onOverlayLoad,
   onSelectionCleared,
   overlayCancel,
+  overlayCaptureDelayed,
   overlayCopy,
   overlayReady,
   overlaySave,
@@ -87,6 +88,7 @@ export function Overlay({ index }: { index: number }) {
     }),
   );
   const [exporting, setExporting] = useState(false);
+  const delaying = useRef(false);
   const [notice, setNotice] = useState<string | null>(null);
   const { selection, annotate } = state;
 
@@ -119,6 +121,10 @@ export function Overlay({ index }: { index: number }) {
         canvas.height = frame.height;
         canvas.getContext("2d")?.drawImage(bitmap, 0, 0);
         bitmap.close();
+        dispatch({ action: { type: "loadFrame", region: frame.region }, env: NO_ENV });
+        delaying.current = false;
+        setExporting(false);
+        setNotice(null);
         setInfo(frame);
         await overlayReady(frame.session);
       } catch (error) {
@@ -202,7 +208,7 @@ export function Overlay({ index }: { index: number }) {
    * dialog or an error the overlay stays as it was.
    */
   const exportImage = (action: ExportAction) => {
-    if (!info || !env || exporter.running) return;
+    if (!info || !env || exporter.running || delaying.current) return;
     let current = state;
     if (current.annotate.gesture?.type === "editing") {
       const commit = { type: "commitText" } as const;
@@ -232,6 +238,18 @@ export function Overlay({ index }: { index: number }) {
   useEffect(() => {
     exportRef.current = exportImage;
   });
+
+  const captureDelayed = () => {
+    if (!info || !region || exporter.running || delaying.current) return;
+    delaying.current = true;
+    setExporting(true);
+    setNotice(null);
+    void overlayCaptureDelayed(info.session, region).catch((error: unknown) => {
+      delaying.current = false;
+      setExporting(false);
+      setNotice(String(error));
+    });
+  };
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (!info || event.button !== 0) return;
@@ -326,6 +344,7 @@ export function Overlay({ index }: { index: number }) {
           keys={KEYS}
           send={send}
           onExport={exportImage}
+          onCaptureDelayed={captureDelayed}
         />
       )}
       {notice ? (

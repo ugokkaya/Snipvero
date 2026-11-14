@@ -9,8 +9,12 @@ Moving it into the workflows directory and provisioning a runner require separat
 then, it needs `MACOS_SIGNING_ENABLED=true`; manual runs default to artifacts only (`publish=false`).
 No workflow creates certificates or changes repository settings.
 The existing `v0.1.0-beta.1` download remains the original ad-hoc build; do not replace its assets.
-`0.1.0-beta.2` to `0.1.0-beta.7` are published. The current source version is
-`0.1.0-beta.7` (build 7), updating Vite/Rolldown for GHSA-p4f5-76q4-ffq7. This affects
+`0.1.0-beta.2` to `0.1.0-beta.7` are published. Beta 8 publication is in preparation.
+The current source version is `0.1.0-beta.8` (build 8), adding five-second region recapture with
+a blinking border/countdown and modifier-free Print Screen / macOS F13 shortcuts. The maintainer
+reported these features working in the local development-signed build on November 15, 2026;
+this does not establish exhaustive mixed-display, keyboard or notarized-candidate runtime QA.
+Beta 7 updated Vite/Rolldown for GHSA-p4f5-76q4-ffq7. This affects
 network-exposed development servers, not installed desktop apps; see CONTRIBUTING.md. Beta 6
 fixed a menu bar freeze and added capture-shortcut cancellation (ADR-033, ADR-034). Beta 3 introduced
 in-app updates (ADR-028). Every new candidate must pass Developer ID signing, Apple notarization,
@@ -34,9 +38,33 @@ claim those manual checks passed.
 
 ## 1. Version
 
+For delayed region capture (FR-17 / ADR-035), the manual QA checklist for a
+signed macOS bundle: select a region, click the toolbar timer, open a dropdown during the five-second
+wait and confirm the refreshed screenshot includes it. Confirm the region is unchanged, old
+annotations/undo are cleared, and Copy/Save export the fresh image. Cancel once during the wait
+with the capture shortcut, start a new capture immediately, and wait beyond the old deadline: no
+old result may reopen. Also test a second display (including mixed scale), display removal/scale
+change during the wait, and repeated recapture/cancel cycles. Unit tests do not establish native
+focus/dropdown behaviour. The user authorized Beta 8 publication after reporting the features working.
+
+The blinking border must outline the selected area while the badge counts 5 down to 1. Click
+through the indicator to open a dropdown and confirm it never takes focus. The badge must remain
+visible near monitor edges/full-screen selections; both badge and border must be absent from the
+captured image. Cancellation/display changes must remove the indicator immediately; a late tick
+from the cancelled timer must not alter a newer indicator. Native panel QA is still required.
+
+For the Print Screen exception (ADR-036), use a keyboard that delivers that key: assign
+Print Screen alone in Global shortcut, verify capture and shortcut-to-cancel, restart the app and
+verify persistence, then reset to the default. Other bare keys must remain rejected. OS/keyboard
+interception is still a limitation; do not claim successful native registration from unit tests.
+On a Mac keyboard that reports Print Screen as F13 (observed in the user's diagnostic card),
+verify bare F13 assignment, native capture/cancel and persistence; it must remain registered as
+F13, not remapped to literal PrintScreen, since those have different native keycodes. Other bare
+function keys remain rejected.
+
 There are two version numbers, because Apple's bundle fields accept integers only (ADR-022).
 
-**Package version** `0.1.0-beta.7` (SemVer pre-release, never with `+build` metadata: the updater
+**Package version** `0.1.0-beta.8` (SemVer pre-release, never with `+build` metadata: the updater
 ignores it when ordering versions, so a rebuild needs a new version). It lives in three manifests, and
 `manifest_versions_match` (Rust test) fails if they differ:
 
@@ -44,8 +72,8 @@ ignores it when ordering versions, so a rebuild needs a new version). It lives i
 - `src-tauri/Cargo.toml` → `version` (then run `cargo check` so `Cargo.lock` follows)
 - `src-tauri/tauri.conf.json` → `version`
 
-It names the Git tag (`v0.1.0-beta.7`), the DMG (`Snipvero_0.1.0-beta.7_aarch64.dmg`), the
-updater package (`Snipvero_0.1.0-beta.7_aarch64.app.tar.gz`), the Windows installer and the GitHub
+It names the Git tag (`v0.1.0-beta.8`), the DMG (`Snipvero_0.1.0-beta.8_aarch64.dmg`), the
+updater package (`Snipvero_0.1.0-beta.8_aarch64.app.tar.gz`), the Windows installer and the GitHub
 Release. A pre-release version selects the beta update channel (§9).
 
 **Bundle versions** in the app's `Info.plist`, both one to three period-separated integers:
@@ -53,7 +81,7 @@ Release. A pre-release version selects the beta update channel (§9).
 | Key                          | Value   | Set in                                                     |
 | ---------------------------- | ------- | ---------------------------------------------------------- |
 | `CFBundleShortVersionString` | `0.1.0` | `src-tauri/Info.plist` (overrides the bundler's value)     |
-| `CFBundleVersion`            | `7`     | `tauri.conf.json` → `bundle.macOS.bundleVersion` (a build) |
+| `CFBundleVersion`            | `8`     | `tauri.conf.json` → `bundle.macOS.bundleVersion` (a build) |
 
 `CFBundleShortVersionString` is the package version without its pre-release suffix;
 `bundle_versions_follow_apple_format` (Rust test) fails if it differs or if either value is not in

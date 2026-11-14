@@ -29,6 +29,8 @@ use crate::transfer;
 #[cfg(target_os = "macos")]
 mod macos;
 
+pub mod delayed;
+
 const LABEL_PREFIX: &str = "overlay-";
 
 /// Pre-create overlays only where a capture backend exists to use them.
@@ -60,6 +62,8 @@ pub struct Session {
     pub selection: Option<Selection>,
     /// A copy or save is in progress; further export requests are rejected until it ends.
     pub exporting: bool,
+    /// Hidden while a delayed recapture waits or reads the screen. Keeps the capture lock held.
+    pub delayed: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,6 +95,7 @@ impl Session {
             previous_app,
             selection: None,
             exporting: false,
+            delayed: false,
         })
     }
 
@@ -107,6 +112,9 @@ impl Session {
     /// Records the selection made on overlay `index`. Returns the overlay that held the previous
     /// selection if it was another one, so that overlay can clear it.
     fn select(&mut self, index: usize, region: Option<PixelRect>) -> Result<Option<usize>, String> {
+        if self.delayed {
+            return Err("a delayed capture is in progress".into());
+        }
         let frame = self.frames.get(index).ok_or("no such frame")?;
         if let Some(r) = region
             && !r.fits(frame.width, frame.height)
@@ -167,7 +175,9 @@ impl CaptureState {
 
     /// True once every overlay of the current session is visible.
     pub fn all_visible(&self) -> bool {
-        self.session().as_ref().is_some_and(Session::all_shown)
+        self.session()
+            .as_ref()
+            .is_some_and(|s| !s.delayed && s.all_shown())
     }
 
     /// The active capture's ID, if any.
@@ -265,6 +275,7 @@ pub struct FrameInfo {
     pub width: u32,
     pub height: u32,
     pub focused: bool,
+    pub region: Option<PixelRect>,
 }
 
 /// Captures all displays and shows the overlays. Returns immediately; capture runs on a thread.
@@ -356,6 +367,8 @@ pub fn close(app: &AppHandle, session: u64) -> bool {
     if !state.is_active(session) {
         return false;
     }
+    #[cfg(target_os = "macos")]
+    macos::hide_countdown(session);
     for (label, window) in app.webview_windows() {
         if label.starts_with(LABEL_PREFIX) {
             let _ = window.destroy();
@@ -565,7 +578,16 @@ fn cursor_display(frames: &[Frame]) -> usize {
 #[tauri::command]
 pub fn overlay_frame_info(index: usize, state: State<CaptureState>) -> Result<FrameInfo, String> {
     let (session, frame) = state.frame(index)?;
-    let focused = state.session().as_ref().is_some_and(|s| s.focus == index);
+    let guard = state.session();
+    let s = guard
+        .as_ref()
+        .filter(|s| s.id == session && !s.delayed)
+        .ok_or("capture no longer active")?;
+    let focused = s.focus == index;
+    let region = s
+        .selection
+        .filter(|selection| selection.index == index)
+        .and_then(|s| s.region);
     Ok(FrameInfo {
         session,
         index,
@@ -575,6 +597,7 @@ pub fn overlay_frame_info(index: usize, state: State<CaptureState>) -> Result<Fr
         width: frame.width,
         height: frame.height,
         focused,
+        region,
     })
 }
 
@@ -600,7 +623,7 @@ pub fn overlay_ready(
         let mut guard = state.session();
         let s = guard
             .as_mut()
-            .filter(|s| s.id == session)
+            .filter(|s| s.id == session && !s.delayed)
             .ok_or("capture no longer active")?;
         let bounds = s.frames.get(index).ok_or("no such frame")?.bounds;
         (bounds, s.focus, s.started, s.mark_shown(index)?)
@@ -711,6 +734,7 @@ mod tests {
             previous_app: None,
             selection: None,
             exporting: false,
+            delayed: false,
         }
     }
 

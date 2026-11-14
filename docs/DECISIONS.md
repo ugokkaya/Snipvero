@@ -807,3 +807,69 @@ privileges`), and Snipvero never sees a password. After a successful install the
 - **Alternatives:** a page heartbeat that closes the capture when the page stops answering was
   rejected for now (user decision). It would recover without the user knowing the shortcut, but
   a long legitimate stall could close a capture and lose its annotations.
+
+## ADR-035: Delayed recapture of a selected region
+
+- **Status:** implemented (2026-11-15). Automated verification on macOS Apple silicon; native
+  dropdown/focus QA pending. Windows remains unimplemented for capture and not locally verified.
+- **Context:** a capture shortcut or focus change can dismiss a dropdown before it is captured.
+  The user requested choosing a region first, then opening the dropdown during a five-second wait.
+- **Decision:** add a five-second recapture button to the region toolbar. Hide all overlays, return
+  focus once to the previous app, then wait on a worker thread. Capture fresh screen pixels before
+  showing/focusing any overlay. Reopen the editor with the same physical-pixel region; discard old
+  annotations and undo history because they belong to a different screenshot. The tooltip states
+  this. No automatic export, configurable timer or persistent setting in this first version.
+- **Lifecycle:** keep the active session and capture/update lock while waiting. Reject selection,
+  readiness and export requests during recapture. The global shortcut cancels it, without depending
+  on a hidden webview receiving Escape. On completion, validate the original session before swapping
+  in a new ID; stale timer/capture results cannot reopen or overwrite a later session. Start a new
+  readiness watchdog only after the fresh frames exist. Reuse the hidden pages for the reload and
+  reset their editor state; final cancellation/export retains ADR-013's destroy/recreate lifecycle.
+- **Coordinates:** match the selected display by ID, not enumeration order; refuse changed bounds,
+  pixel dimensions or scale and changed desktop arrangement rather than guessing a new region.
+  The existing frame-pixel coordinate model and export pipeline remain unchanged.
+- **Privacy/dependencies:** no new dependency, network path, intermediate screenshot file, clipboard
+  write or settings entry. Old frame buffers are released when the session is replaced or cancelled.
+- **Countdown feedback (2026-11-15, user choice):** after trying the local build, the user requested
+  visible feedback for both the remaining time and region, and chose a blinking border plus counter.
+  A native transparent `NSPanel` uses `NonactivatingPanel`, ignores mouse events and is ordered front
+  without becoming key. Only the border alternates opacity every half second; a solid badge counts
+  5 down to 1. Layout uses the existing tested geometry module with per-display pixel ratios and
+  on-screen badge clamping. The worker uses a monotonic deadline, validates each tick's session on
+  the main thread and waits for the final `orderOut` before invoking capture. Normal close also
+  removes the matching indicator immediately. No overlay webview is made transparent or interactive
+  during the wait, and no extra network/dependency is added; only AppKit binding features for native
+  views/panels/labels are enabled. This is an exception to the earlier 'no window during wait' detail,
+  not to the requirement that no focus is taken before capturing. Native indicator/input QA pending.
+
+## ADR-036: Allow the dedicated Print Screen key without modifiers
+
+- **Status:** implemented (2026-11-15). Automated tests on macOS Apple silicon; native key assignment,
+  restart persistence and capture/cancel QA pending. Windows not locally verified.
+- **Context:** the user tried assigning Print Screen alone, which ADR-030's generic modifier rule
+  rejected, and explicitly requested allowing it.
+- **Decision:** exempt only modifier-free `Code::PrintScreen` from the modifier count. All other
+  modifier/reserved-key checks, registration failure handling, atomic settings updates and startup
+  validation remain unchanged. This supersedes ADR-030's modifier minimum only for Print Screen
+  alone; it does not allow arbitrary bare keys or one-modifier Print Screen combinations.
+- **Limit:** OS or keyboard software interception still cannot be bypassed. Validation acceptance
+  does not guarantee OS registration or delivery, as noted in ADR-014/ADR-030.
+- **Verification:** Rust tests cover the exception and unchanged rejection of bare regular/function
+  keys and single-modifier Print Screen. Frontend tests cover the unmodified accelerator and updated
+  guidance. No dependency, permission, network or settings format change.
+- **Observed F13 follow-up (2026-11-15):** the updated build still rejected the user's key. An
+  explicit key-capture card reported `key=F13`, `code=F13` with no modifiers. Allow bare F13 on
+  macOS in addition to literal PrintScreen; other function keys and Windows bare F13 keep their
+  modifier rules. This extends the literal-only exception above. Do not normalize F13 to
+  PrintScreen: global-hotkey's macOS backend registers F13 as native0x69 but PrintScreen as0x46,
+  so renaming the accelerator would register the wrong physical key. The UI saves/displays F13
+  honestly and the modifier guidance explains this keyboard mapping. Rust/frontend regression
+  tests cover validation and retaining F13, but native registration/delivery still needs user QA.
+
+### Beta 8 maintainer QA report (ADR-035 / ADR-036, 2026-11-15)
+
+After testing the local development-signed macOS build with the F13 follow-up, the maintainer
+reported that everything works and requested publication as a new release. Keep the timer fixed
+at five seconds for this release. This supersedes the pending basic feature QA notes above, but
+does not claim exhaustive mixed-DPI/display-change/keyboard coverage, clean-Mac installation,
+Homebrew installation, Windows runtime support or runtime QA of the notarized distribution candidate.
