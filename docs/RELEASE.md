@@ -9,7 +9,7 @@ Moving it into the workflows directory and provisioning a runner require separat
 then, it needs `MACOS_SIGNING_ENABLED=true`; manual runs default to artifacts only (`publish=false`).
 No workflow creates certificates or changes repository settings.
 The existing `v0.1.0-beta.1` download remains the original ad-hoc build; do not replace its assets.
-`0.1.0-beta.2` to `0.1.0-beta.8` are published.
+`0.1.0-beta.2` to `0.1.0-beta.9` are published.
 The current source version is `0.1.0-beta.9` (build 9), fixing invisible capture-toolbar tooltips.
 The maintainer reported the tooltip fix working in the local development-signed build on
 November 15, 2026, and authorized publication. This does not establish exhaustive mixed-display
@@ -48,7 +48,16 @@ performed. Exhaustive mixed-display/keyboard, clean-Mac and Homebrew runtime QA 
 
 ## 1. Version
 
-Toolbar tooltip fix (Beta 9 candidate, not in Beta 8): in a signed macOS bundle, hover every toolbar
+Beta 9 is published as Latest (non-prerelease, like Beta 8). PR #11 CI passed on macOS and Windows;
+the pinned merge tree equals the frozen build source. Both fresh Developer ID app and DMG
+submissions were Accepted by Apple and stapled. The full distribution/updater gate and every
+app file's bytes, mode and symlink custody passed for the candidate and all eight re-downloaded
+draft/public assets. Only afterward was the beta updater manifest updated; Homebrew Tap PR #7
+updates the generated cask after public verification. No app install, permission, certificate or
+release-automation changes were performed. Clean-Mac, Homebrew and exhaustive mixed-DPI/runtime
+QA remain unverified; the maintainer reported the local development-signed tooltip fix working.
+
+Toolbar tooltip fix (Beta 9): in a signed macOS bundle, hover every toolbar
 button, including disabled Undo/Redo/Delete. Confirm readable labels and platform shortcuts,
 no duplicate native tooltip, and no clipping at each monitor edge (also mixed-DPI displays).
 Moving away or pressing a button must dismiss the tooltip; text editing must keep focus and

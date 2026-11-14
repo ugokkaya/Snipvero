@@ -9,7 +9,7 @@ check for updates.
 **Website:** [snipvero.app](https://snipvero.app) ·
 **Support:** [support@snipvero.app](mailto:support@snipvero.app)
 
-> **Status: beta (0.1.0-beta.8).** macOS on Apple silicon is the only supported platform. See
+> **Status: beta (0.1.0-beta.9).** macOS on Apple silicon is the only supported platform. See
 > [Download](#download) and [Known limitations](#known-limitations).
 
 ## Features
@@ -74,7 +74,7 @@ Intel Macs are not supported by the beta: an Intel or universal build has not be
 ## Download
 
 The macOS beta is available as a disk image (`.dmg`) for Apple silicon from
-[GitHub Releases](https://github.com/ugokkaya/Snipvero/releases/tag/v0.1.0-beta.8). Each
+[GitHub Releases](https://github.com/ugokkaya/Snipvero/releases/tag/v0.1.0-beta.9). Each
 release lists the SHA-256 checksum of its disk image in `SHA256SUMS.txt`. You need macOS 14 or
 later on a Mac with Apple silicon (M1 or later).
 
@@ -84,12 +84,15 @@ later on a Mac with Apple silicon (M1 or later).
 4. Grant Screen Recording permission when macOS asks for it
    ([Screen Recording permission](#screen-recording-permission)).
 
-**Beta 8 is Developer ID signed and notarized by Apple.** Both the app and DMG have stapled
+**Beta 9 is Developer ID signed and notarized by Apple.** Both the app and DMG have stapled
 notarization tickets. The release is for Apple silicon only; no Intel or universal download is
 provided. Users upgrading from Beta 1 may need to grant Screen Recording permission again because
 the signing identity has changed.
 
-Beta 8 adds the five-second region timer with a visible countdown and blinking border, and accepts
+Beta 9 fixes invisible toolbar tooltips: hover over any button, including disabled actions, to
+see its name and available keyboard shortcut. Labels stay within the display.
+
+Beta 8 added the five-second region timer with a visible countdown and blinking border, and accepts
 Print Screen alone (including macOS keyboards that send it as F13).
 
 Beta 7 updated the development toolchain for
@@ -204,7 +207,7 @@ would otherwise attribute the permission to the terminal app.
 2. Drag to select a region. Drag inside it to move it, or drag a handle to resize it.
 3. Pick a tool in the toolbar below the region and draw. Choose **Select and move** (or click the
    active tool again) to move, resize or delete annotations.
-   In source builds, hover over any toolbar button to see its name and available keyboard shortcut,
+   Hover over any toolbar button to see its name and available keyboard shortcut,
    including disabled actions.
 4. Copy or save. Press <kbd>Esc</kbd> to leave without doing either.
 
