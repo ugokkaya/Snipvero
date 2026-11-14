@@ -9,7 +9,7 @@ Moving it into the workflows directory and provisioning a runner require separat
 then, it needs `MACOS_SIGNING_ENABLED=true`; manual runs default to artifacts only (`publish=false`).
 No workflow creates certificates or changes repository settings.
 The existing `v0.1.0-beta.1` download remains the original ad-hoc build; do not replace its assets.
-`0.1.0-beta.2` to `0.1.0-beta.7` are published. Beta 8 publication is in preparation.
+`0.1.0-beta.2` to `0.1.0-beta.8` are published.
 The current source version is `0.1.0-beta.8` (build 8), adding five-second region recapture with
 a blinking border/countdown and modifier-free Print Screen / macOS F13 shortcuts. The maintainer
 reported these features working in the local development-signed build on November 15, 2026;
@@ -36,9 +36,18 @@ beta.3 → beta.4 and beta.4 → beta.5 updates. Homebrew installation, native w
 opening and clean-Mac quarantine QA remain unverified; publishing the release does not
 claim those manual checks passed.
 
+Beta 8 is published as Latest (non-prerelease, the same visibility policy as Beta 7), with eight
+explicit public assets. PR #10 passed CI on macOS and Windows before the pinned merge; the merge
+tree equals the frozen source used for the fresh Developer ID build. Apple accepted both app and
+DMG submissions, both tickets are stapled, and the full distribution/updater gate and byte-identical
+app custody checks passed for the candidate, re-downloaded draft assets and anonymous public
+downloads. Only afterward were the beta updater manifest and generated Homebrew cask updated
+(Tap PR #6). No app installation, Screen Recording change or release-automation activation was
+performed. Exhaustive mixed-display/keyboard, clean-Mac and Homebrew runtime QA remain unverified.
+
 ## 1. Version
 
-For delayed region capture (FR-17 / ADR-035), the manual QA checklist for a
+For delayed region capture (FR-17 / ADR-035), use this manual QA checklist with a
 signed macOS bundle: select a region, click the toolbar timer, open a dropdown during the five-second
 wait and confirm the refreshed screenshot includes it. Confirm the region is unchanged, old
 annotations/undo are cleared, and Copy/Save export the fresh image. Cancel once during the wait

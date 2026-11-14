@@ -9,7 +9,7 @@ check for updates.
 **Website:** [snipvero.app](https://snipvero.app) ·
 **Support:** [support@snipvero.app](mailto:support@snipvero.app)
 
-> **Status: beta (0.1.0-beta.7).** macOS on Apple silicon is the only supported platform. See
+> **Status: beta (0.1.0-beta.8).** macOS on Apple silicon is the only supported platform. See
 > [Download](#download) and [Known limitations](#known-limitations).
 
 ## Features
@@ -17,7 +17,7 @@ check for updates.
 - **Instant capture** from a global shortcut (<kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>2</kbd>) or the
   menu bar icon. All displays freeze together, so nothing moves while you select.
   Change the shortcut from the main window's **Global shortcut** row; it is kept across restarts.
-  The source checkout also accepts **Print Screen** on its own (not yet in Beta 7); the OS or
+  You can also assign **Print Screen** on its own; the OS or
   keyboard software must deliver that key to Snipvero rather than intercepting it.
   On macOS, keyboards that send Print Screen as **F13** can assign F13 alone too; the shortcut is
   displayed and saved as F13 to match the physical key the keyboard sends.
@@ -33,9 +33,9 @@ check for updates.
 - **Light footprint:** a menu bar app with no Dock icon, built on Tauri and the system web view.
   Turn on **Open at Login** in the menu bar to have it ready whenever you log in.
 
-### In development: delayed region capture
+### Delayed region capture
 
-The source checkout includes a five-second timer (not yet in the published Beta 7). Select a region,
+Use the five-second timer to capture dropdowns and other temporary UI. Select a region,
 then click the **timer** in its toolbar. Snipvero hides the capture screen and returns focus to the
 previous app. A gently blinking border keeps your region visible, with a **5 → 1** countdown beside
 it. The indicator lets clicks through to the app and disappears before the screenshot is taken.
@@ -74,7 +74,7 @@ Intel Macs are not supported by the beta: an Intel or universal build has not be
 ## Download
 
 The macOS beta is available as a disk image (`.dmg`) for Apple silicon from
-[GitHub Releases](https://github.com/ugokkaya/Snipvero/releases/tag/v0.1.0-beta.7). Each
+[GitHub Releases](https://github.com/ugokkaya/Snipvero/releases/tag/v0.1.0-beta.8). Each
 release lists the SHA-256 checksum of its disk image in `SHA256SUMS.txt`. You need macOS 14 or
 later on a Mac with Apple silicon (M1 or later).
 
@@ -84,12 +84,15 @@ later on a Mac with Apple silicon (M1 or later).
 4. Grant Screen Recording permission when macOS asks for it
    ([Screen Recording permission](#screen-recording-permission)).
 
-**Beta 7 is Developer ID signed and notarized by Apple.** Both the app and DMG have stapled
+**Beta 8 is Developer ID signed and notarized by Apple.** Both the app and DMG have stapled
 notarization tickets. The release is for Apple silicon only; no Intel or universal download is
 provided. Users upgrading from Beta 1 may need to grant Screen Recording permission again because
 the signing identity has changed.
 
-Beta 7 updates the development toolchain for
+Beta 8 adds the five-second region timer with a visible countdown and blinking border, and accepts
+Print Screen alone (including macOS keyboards that send it as F13).
+
+Beta 7 updated the development toolchain for
 [GHSA-p4f5-76q4-ffq7](https://github.com/vitejs/vite/security/advisories/GHSA-p4f5-76q4-ffq7).
 Installed desktop apps are not affected by this development-server vulnerability. Contributors
 should update their checkout and run `pnpm install`; see [Contributing](CONTRIBUTING.md#security).
