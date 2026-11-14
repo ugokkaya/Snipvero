@@ -10,10 +10,11 @@ then, it needs `MACOS_SIGNING_ENABLED=true`; manual runs default to artifacts on
 No workflow creates certificates or changes repository settings.
 The existing `v0.1.0-beta.1` download remains the original ad-hoc build; do not replace its assets.
 `0.1.0-beta.2` to `0.1.0-beta.8` are published.
-The current source version is `0.1.0-beta.8` (build 8), adding five-second region recapture with
-a blinking border/countdown and modifier-free Print Screen / macOS F13 shortcuts. The maintainer
-reported these features working in the local development-signed build on November 15, 2026;
-this does not establish exhaustive mixed-display, keyboard or notarized-candidate runtime QA.
+The current source version is `0.1.0-beta.9` (build 9), fixing invisible capture-toolbar tooltips.
+The maintainer reported the tooltip fix working in the local development-signed build on
+November 15, 2026, and authorized publication. This does not establish exhaustive mixed-display
+or notarized-candidate runtime QA. Beta 8 added five-second region recapture with a blinking
+border/countdown and modifier-free Print Screen / macOS F13 shortcuts.
 Beta 7 updated Vite/Rolldown for GHSA-p4f5-76q4-ffq7. This affects
 network-exposed development servers, not installed desktop apps; see CONTRIBUTING.md. Beta 6
 fixed a menu bar freeze and added capture-shortcut cancellation (ADR-033, ADR-034). Beta 3 introduced
@@ -47,6 +48,13 @@ performed. Exhaustive mixed-display/keyboard, clean-Mac and Homebrew runtime QA 
 
 ## 1. Version
 
+Toolbar tooltip fix (Beta 9 candidate, not in Beta 8): in a signed macOS bundle, hover every toolbar
+button, including disabled Undo/Redo/Delete. Confirm readable labels and platform shortcuts,
+no duplicate native tooltip, and no clipping at each monitor edge (also mixed-DPI displays).
+Moving away or pressing a button must dismiss the tooltip; text editing must keep focus and
+tool selection, Copy/Save and delayed capture must still work. Confirm no tooltip in exports.
+Native WKWebView QA remains required; DOM tests do not establish native hover rendering.
+
 For delayed region capture (FR-17 / ADR-035), use this manual QA checklist with a
 signed macOS bundle: select a region, click the toolbar timer, open a dropdown during the five-second
 wait and confirm the refreshed screenshot includes it. Confirm the region is unchanged, old
@@ -73,7 +81,7 @@ function keys remain rejected.
 
 There are two version numbers, because Apple's bundle fields accept integers only (ADR-022).
 
-**Package version** `0.1.0-beta.8` (SemVer pre-release, never with `+build` metadata: the updater
+**Package version** `0.1.0-beta.9` (SemVer pre-release, never with `+build` metadata: the updater
 ignores it when ordering versions, so a rebuild needs a new version). It lives in three manifests, and
 `manifest_versions_match` (Rust test) fails if they differ:
 
@@ -81,8 +89,8 @@ ignores it when ordering versions, so a rebuild needs a new version). It lives i
 - `src-tauri/Cargo.toml` → `version` (then run `cargo check` so `Cargo.lock` follows)
 - `src-tauri/tauri.conf.json` → `version`
 
-It names the Git tag (`v0.1.0-beta.8`), the DMG (`Snipvero_0.1.0-beta.8_aarch64.dmg`), the
-updater package (`Snipvero_0.1.0-beta.8_aarch64.app.tar.gz`), the Windows installer and the GitHub
+It names the Git tag (`v0.1.0-beta.9`), the DMG (`Snipvero_0.1.0-beta.9_aarch64.dmg`), the
+updater package (`Snipvero_0.1.0-beta.9_aarch64.app.tar.gz`), the Windows installer and the GitHub
 Release. A pre-release version selects the beta update channel (§9).
 
 **Bundle versions** in the app's `Info.plist`, both one to three period-separated integers:
@@ -90,7 +98,7 @@ Release. A pre-release version selects the beta update channel (§9).
 | Key                          | Value   | Set in                                                     |
 | ---------------------------- | ------- | ---------------------------------------------------------- |
 | `CFBundleShortVersionString` | `0.1.0` | `src-tauri/Info.plist` (overrides the bundler's value)     |
-| `CFBundleVersion`            | `8`     | `tauri.conf.json` → `bundle.macOS.bundleVersion` (a build) |
+| `CFBundleVersion`            | `9`     | `tauri.conf.json` → `bundle.macOS.bundleVersion` (a build) |
 
 `CFBundleShortVersionString` is the package version without its pre-release suffix;
 `bundle_versions_follow_apple_format` (Rust test) fails if it differs or if either value is not in

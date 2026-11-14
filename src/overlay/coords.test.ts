@@ -32,6 +32,25 @@ describe("pixelRatio", () => {
   });
 });
 
+describe("tooltip placement using placeOutside", () => {
+  const view = { width: 800, height: 600 };
+  const size = { width: 300, height: 46 };
+
+  it("flips below a button at the top and clamps at the right edge", () => {
+    expect(placeOutside({ x: 770, y: 4, width: 28, height: 28 }, size, view, 8, "above")).toEqual({
+      x: 500,
+      y: 40,
+    });
+  });
+
+  it("stays above bottom-edge buttons and clamps negative coordinates", () => {
+    expect(placeOutside({ x: -4, y: 568, width: 28, height: 28 }, size, view, 8, "above")).toEqual({
+      x: 0,
+      y: 514,
+    });
+  });
+});
+
 describe("clientToPixel", () => {
   it("scales Retina pointer positions to physical pixels", () => {
     expect(clientToPixel({ x: 100, y: 50.5 }, RETINA.bounds, RETINA.frame)).toEqual({

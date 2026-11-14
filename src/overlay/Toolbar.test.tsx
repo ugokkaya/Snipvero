@@ -7,6 +7,64 @@ import { INITIAL_EDITOR } from "./editor";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+it("shows custom tooltips for every tool, including disabled actions, without changing clicks", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const send = vi.fn();
+  const onExport = vi.fn();
+  act(() =>
+    root.render(
+      <Toolbar
+        position={{ x: 0, y: 0 }}
+        tool="select"
+        style={INITIAL_EDITOR.annotate.style}
+        canUndo={false}
+        canRedo={false}
+        canDelete={false}
+        canExport={true}
+        keys={{ undo: "⌘Z", redo: "⇧⌘Z", copy: "⌘C", save: "⌘S" }}
+        send={send}
+        onExport={onExport}
+        onCaptureDelayed={vi.fn()}
+      />,
+    ),
+  );
+  try {
+    expect(container.querySelector('[role="tooltip"]')).toBeNull();
+    for (const button of container.querySelectorAll("button")) {
+      const anchor = button.parentElement;
+      if (!anchor) throw new Error("Missing tooltip anchor");
+      act(() => anchor.dispatchEvent(new PointerEvent("pointerover", { bubbles: true })));
+      const tooltip = container.querySelector('[role="tooltip"]');
+      expect(tooltip?.textContent).toBe(button.getAttribute("aria-label"));
+      expect(button.getAttribute("aria-describedby")).toBe(tooltip?.id);
+      expect(button.hasAttribute("title")).toBe(false);
+      act(() => anchor.dispatchEvent(new PointerEvent("pointerout", { bubbles: true })));
+      expect(container.querySelector('[role="tooltip"]')).toBeNull();
+    }
+    const text = container.querySelector<HTMLButtonElement>('button[aria-label="Text"]');
+    act(() => text?.focus());
+    expect(container.querySelector('[role="tooltip"]')?.textContent).toBe("Text");
+    act(() => text?.blur());
+    expect(container.querySelector('[role="tooltip"]')).toBeNull();
+    act(() => text?.click());
+    expect(send).toHaveBeenCalledWith({ type: "setTool", tool: "text" });
+    const copy = container.querySelector<HTMLButtonElement>('button[aria-label^="Copy"]');
+    act(() =>
+      copy?.parentElement?.dispatchEvent(new PointerEvent("pointerover", { bubbles: true })),
+    );
+    expect(container.querySelector('[role="tooltip"]')?.textContent).toBe("Copy to clipboard (⌘C)");
+    act(() => copy?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
+    expect(container.querySelector('[role="tooltip"]')).toBeNull();
+    act(() => copy?.click());
+    expect(onExport).toHaveBeenCalledWith("copy");
+  } finally {
+    act(() => root.unmount());
+    container.remove();
+  }
+});
+
 it("offers a five-second recapture, warns about annotations and disables it during export", () => {
   const container = document.createElement("div");
   const root = createRoot(container);
@@ -32,7 +90,7 @@ it("offers a five-second recapture, warns about annotations and disables it duri
   try {
     render(true);
     const timer = container.querySelector<HTMLButtonElement>('button[aria-label*="5 seconds"]');
-    expect(timer?.title).toContain("clears annotations");
+    expect(timer?.getAttribute("aria-label")).toContain("clears annotations");
     act(() => timer?.click());
     expect(onCaptureDelayed).toHaveBeenCalledOnce();
     render(false);
