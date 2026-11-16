@@ -876,10 +876,11 @@ Homebrew installation, Windows runtime support or runtime QA of the notarized di
 
 ## ADR-037: Screen recording: one pipeline, MP4 first, GIF as an export
 
-- **Status:** proposed (2026-11-16). Design only: no recording code exists yet. Nothing here has
-  been run; the API facts below come from the `objc2-*` 0.3.2 bindings in the local registry and
-  Apple's documentation, and each task of the plan states what it must measure before it relies on them.
-  macOS is the target; Windows must keep compiling (unsupported stubs).
+- **Status:** proposed (2026-11-16); **task 2 (silent MP4 recording on macOS) implemented and partly verified
+  on macOS only** (see "Task 2 outcome" below for what was measured and what was not). Tasks 3 (audio) and 4 (GIF) are
+  not started; everything about them is still a design and unverified. The API facts below come from the `objc2-*`
+  0.3.2 bindings in the local registry and Apple's documentation. macOS is the target; Windows must keep compiling
+  (unsupported stubs, type-checked against the shared code but not built on Windows).
 - **Context:** the user asked for screen recording. Decisions already taken with the user:
   one recording pipeline; MP4 (H.264) first; GIF is an export of a finished recording, never a
   separate direct-record mode; system audio and microphone are optional, separately toggled and
@@ -1088,6 +1089,48 @@ paper; task 4 confirms with `cargo tree`, `pnpm notices:check` and a size compar
   at most 60 s of source (a longer recording needs a trim, out of scope for the first version, and the dialog says so), a size estimate
   shown before saving. Export runs on a worker, is cancelable, writes a hidden sibling file and renames it (ADR-019), and never touches the MP4.
 
+### Task 2 outcome (silent MP4 on macOS)
+
+Implemented as planned in `recording/{mod,macos,windows,tempfiles}.rs`, `geometry.rs`, the overlay's Record entry points, the tray
+row, the review window and the `snipvero-recording` preview protocol. Deviations and decisions taken while building it:
+
+- **Dependencies.** `objc2-av-foundation` and `objc2-core-media` (default features off) are direct; `objc2-core-audio`,
+  `objc2-core-audio-types` and `objc2-core-video` come in transitively because the two bindings depend on them
+  (5 new crates in `Cargo.lock`, all `Zlib OR Apache-2.0 OR MIT`, the objc2 family; `pnpm notices:check` passes). `dispatch2` (already in the tree through
+  `rfd` and `tao`) is now named directly for the frame queue, and `objc2-foundation` gained `NSDictionary` and `NSValue`.
+  `libc` and `objc2-core-video` are not direct dependencies: free space uses `NSURL` resource values, the frame status uses the
+  sample's attachment dictionary.
+- **Whole-app exclusion.** The content filter excludes Snipvero's entire application, which covers the overlay, the native
+  indicator and the review window with one rule, so the indicator needs no separate filter entry.
+- **Indicator.** The red border and clock reuse the countdown panel (`overlay/macos/countdown.rs`, generalized with a text and a colour);
+  the tray row becomes **Stop Recording** and the tray title shows a red dot and the elapsed time. Both only reflect state: they have no logic of their own.
+- **Lock hand-off.** `overlay::hand_off_to_recording` closes the overlays like `close` but keeps the capture lock; the recording
+  releases it when it ends or fails to start. A capture, a second recording and an update install are therefore excluded for the whole recording.
+- **Stop sources.** Tray row, capture shortcut, cap, 1 GiB file guard, and a stream/encoder failure reported by the delegate. A repeated stop is
+  ignored (`Machine::begin_stop` acts once). The writer's session ends at the host-clock time of the stop, so a static screen
+  (SCK sends no frames) still yields a video as long as the recording.
+- **Display removal / permission revoked.** Handled by `stream:didStopWithError:`: the recording is finalized with a notice. No
+  separate `NSApplicationDidChangeScreenParametersNotification` observer was added; this path is **not tested** (no way to unplug a display or revoke the permission here).
+- **File-size bound.** At 20 Mbit/s the default cap gives 750 MB; at the 600 s maximum it would be 1.5 GB, which the 1 GiB guard stops at about
+  430 s. Regions of 5K displays do not fit H.264 level 5.2 (at most 8192 px per side and 36 864 macroblocks, 9.4 megapixels) and are refused with a message.
+- **Not implemented (not needed yet):** `recording_stop` (the page has no stop control; the tray, shortcut and cap stop it) and the
+  `recording-progress` event (nothing displays it; the clock is the tray title and the indicator). Mid-recording cancel is stop, then Discard;
+  `Recorder::cancel` is only used when the app quits or a start is raced by exit.
+- **Review window.** Plays the file through a custom protocol with HTTP range support instead of a path; the CSP gained a `media-src`
+  for it. Closing the window keeps the recording; the tray row becomes **Review Last Recording…**; another recording is refused until it is saved or discarded.
+  Save, Copy File and Copy Path run in Rust. Copies on the clipboard are valid only until the temporary file is deleted (documented in the window and README).
+- **Settings.** `recordingMaxSeconds` (clamped to 10–600) in `settings.json`; changing the shortcut preserves it. No UI for it.
+- **Measured, macOS (real ScreenCaptureKit + AVAssetWriter, run from a terminal that holds Screen Recording permission):**
+  - The ignored test `records_a_region_to_a_finished_mp4` records 2 s of a 320×240 point region: 58–59 frames, 0 dropped, 2.01 s, 70–480 KB (screen-content dependent),
+    `ftyp` + `moov` present; an AVFoundation probe reports `isPlayable`, one video track, `avc1`, 320×240, ~30 fps, duration 2.007 s; QuickLook produces a thumbnail.
+  - The built-in harness (`--stress-record=2 --stress-record-quit`, debug binary with a temporary identifier) ran 2 full cycles through the real state
+    machine: 960×540 px, 89 frames in 3.0 s, 783–788 KB, finalized, discarded, folder empty afterwards; then quit in the middle of a third recording left no
+    `recordings-*` folder. After `kill -9` mid-recording the folder was left behind and the next launch removed it ("removed 1 leftover recording folder(s)").
+  - **Not verified:** the picture's content and the region's placement. The test machine's screen was locked (lock-screen wallpaper), so frames were
+    dark/moving and no app window could be placed over a known region. The overlay → Record flow, the tray row/title, the indicator panel, the review window with video
+    playback, Save/Copy, the shortcut stop, a Retina vs 1× region, memory over many cycles, the signed `.app` smoke test with real clicks and Windows are
+    **not run**; the Turkish QA checklist in the local `docs/PROGRESS.md` covers them.
+
 ### Plan for tasks 2–4 (follow in order; each ends with `pnpm check` and the cargo trio)
 
 **Task 2: video (MP4, no audio)**
@@ -1129,5 +1172,5 @@ paper; task 4 confirms with `cargo tree`, `pnpm notices:check` and a size compar
 3. `recording_export_gif` + `recording-export-progress`, save dialog (`*.gif` only, plain suggested name as `rfd` today), UI: fps/width choice, size estimate, progress, cancel, error.
 4. QA and docs: file plays in browsers/Preview, memory stays bounded for a 5-minute source (frames streamed, never all held), temp file untouched, README/ARCHITECTURE/REQUIREMENTS updates and the status line of this ADR.
 
-- **Verification so far:** none beyond reading the code and bindings. Until tasks 2–4 are done, anything above marked
-  as an expectation (entitlement behaviour, notarization acceptance, mixing vs. two tracks, macOS 15 behaviour) is unverified.
+- **Verification so far:** task 2 as listed under "Task 2 outcome". For tasks 3 and 4, nothing beyond reading the code and bindings: anything above
+  marked as an expectation (entitlement behaviour, notarization acceptance, mixing vs. two tracks, macOS 15 behaviour) is unverified.
