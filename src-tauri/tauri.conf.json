@@ -50,6 +50,7 @@
       "minimumSystemVersion": "14.0",
       "bundleVersion": "9",
       "hardenedRuntime": true,
+      "entitlements": "Entitlements.plist",
       "signingIdentity": "-"
     }
   },

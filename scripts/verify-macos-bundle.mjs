@@ -86,6 +86,8 @@ function filesUnder(dir) {
     .sort();
 }
 
+const MICROPHONE_ENTITLEMENT = "com.apple.security.device.audio-input";
+
 const sha256 = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
 function readPlist(path) {
@@ -115,6 +117,14 @@ function verifyApp(app, label) {
   expect("LSMinimumSystemVersion", tauriConfig.bundle.macOS.minimumSystemVersion);
   expect("LSUIElement", true);
   expect("NSHumanReadableCopyright", tauriConfig.bundle.copyright);
+  // The microphone prompt's text comes from src-tauri/Info.plist; without it macOS ends the app on
+  // the first microphone access (ADR-037).
+  const micText = readPlist(join(root, "src-tauri/Info.plist"))?.NSMicrophoneUsageDescription;
+  check(
+    typeof micText === "string" && micText.trim() !== "",
+    "source Info.plist explains the microphone",
+  );
+  expect("NSMicrophoneUsageDescription", micText);
 
   const executable = plist.CFBundleExecutable ?? "";
   const binary = join(app, "Contents/MacOS", executable);
@@ -221,8 +231,19 @@ function verifyApp(app, label) {
   const adhoc = /^Signature=adhoc$/m.test(details);
   info(`signature: ${adhoc ? "ad hoc" : authority}`);
 
-  const entitlements = run("codesign", ["-d", "--entitlements", "-", "--xml", app]).stdout.trim();
-  check(!/<key>/.test(entitlements), "no entitlements (ADR-020)", entitlements ? "present" : "");
+  // Exactly one entitlement, set to true: the hardened runtime denies the microphone without it.
+  // Anything else (a sandbox, JIT, get-task-allow, camera) needs a review (ADR-020, ADR-037).
+  const entitlements = run("codesign", ["-d", "--entitlements", "-", "--xml", app]).stdout;
+  const granted = [...entitlements.matchAll(/<key>([^<]+)<\/key>\s*<(true|false)\s*\/>/g)].map(
+    (match) => `${match[1]}=${match[2]}`,
+  );
+  const keys = [...entitlements.matchAll(/<key>([^<]+)<\/key>/g)].map((match) => match[1]);
+  check(
+    keys.length === 1 && granted.length === 1 && granted[0] === `${MICROPHONE_ENTITLEMENT}=true`,
+    `exactly one entitlement: ${MICROPHONE_ENTITLEMENT} (ADR-037)`,
+    keys.length === 0 ? "none" : keys.join(", "),
+  );
+  check(!keys.includes("com.apple.security.get-task-allow"), "no get-task-allow entitlement");
 
   const assess = run("spctl", ["-a", "-t", "exec", "-vv", app]);
   const assessment = (assess.stdout + assess.stderr).trim().replace(/\n/g, "; ");

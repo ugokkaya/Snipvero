@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Hardened runtime denies microphone access without this entitlement (measured, ADR-037), so
+       the optional microphone of a screen recording could never be switched on. It is the only
+       entitlement: no sandbox, no JIT, no camera, no screen-capture entitlement (Screen Recording
+       is a privacy permission). Applied by the bundler through bundle.macOS.entitlements;
+       scripts/verify-macos-bundle.mjs requires exactly this one. -->
+  <key>com.apple.security.device.audio-input</key>
+  <true/>
+</dict>
+</plist>

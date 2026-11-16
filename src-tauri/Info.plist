@@ -10,5 +10,10 @@
        Overrides the bundler's value; a Rust test keeps it equal to the package version's core. -->
   <key>CFBundleShortVersionString</key>
   <string>0.1.0</string>
+  <!-- Shown by the system when the microphone is first switched on for a screen recording. Without
+       the key macOS ends the app on the first microphone access. Nothing touches the microphone
+       while the option is off (ADR-037). -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Snipvero records your microphone only when you turn on microphone audio for a screen recording.</string>
 </dict>
 </plist>
