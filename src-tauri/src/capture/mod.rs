@@ -13,6 +13,9 @@ use crate::geometry::LogicalRect;
 mod macos;
 #[cfg(target_os = "macos")]
 use macos as platform;
+/// What the recording backend needs to build the same content filter as a screenshot.
+#[cfg(target_os = "macos")]
+pub(crate) use macos::{PIXEL_FORMAT_BGRA, own_applications, shareable_content};
 
 /// A captured display.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]

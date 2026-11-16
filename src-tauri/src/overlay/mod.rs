@@ -40,6 +40,24 @@ pub const PRECREATE: bool = cfg!(target_os = "macos");
 /// page) would otherwise leave the capture busy and invisible, so shortcut and tray did nothing.
 const READY_TIMEOUT: Duration = Duration::from_secs(8);
 
+/// What the overlay is for: the full screenshot toolbar, or only choosing a region to record.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Mode {
+    #[default]
+    Capture,
+    Record,
+}
+
+/// The display and frame a recording was started from, for the recording module.
+#[derive(Debug, Clone, Copy)]
+pub struct RecordingTarget {
+    pub display_id: u32,
+    pub bounds: LogicalRect,
+    /// Frame size in physical pixels.
+    pub frame: (u32, u32),
+}
+
 #[derive(Default)]
 pub struct CaptureState {
     /// Set while a capture is being taken or shown, so a second trigger is ignored.
@@ -64,6 +82,7 @@ pub struct Session {
     pub exporting: bool,
     /// Hidden while a delayed recapture waits or reads the screen. Keeps the capture lock held.
     pub delayed: bool,
+    pub mode: Mode,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,6 +115,7 @@ impl Session {
             selection: None,
             exporting: false,
             delayed: false,
+            mode: Mode::Capture,
         })
     }
 
@@ -169,6 +189,37 @@ impl CaptureState {
         self.abort();
     }
 
+    /// Gives the capture lock back when a recording ends (or fails to start): the lock was kept
+    /// when its overlay closed (`hand_off_to_recording`), so nothing else ran meanwhile.
+    pub fn release_recording(&self) {
+        self.abort();
+    }
+
+    /// Checks that `region` of overlay `index` may be recorded now and makes it the selection.
+    /// Not while an export or a delayed capture runs, which own the overlays.
+    pub fn begin_recording(
+        &self,
+        session: u64,
+        index: usize,
+        region: PixelRect,
+    ) -> Result<RecordingTarget, String> {
+        let mut guard = self.session();
+        let s = guard
+            .as_mut()
+            .filter(|s| s.id == session)
+            .ok_or("capture no longer active")?;
+        if s.exporting || s.delayed || !s.all_shown() {
+            return Err("the capture is busy".into());
+        }
+        s.select(index, Some(region))?;
+        let frame = s.frames.get(index).ok_or("no such frame")?;
+        Ok(RecordingTarget {
+            display_id: frame.display_id,
+            bounds: frame.bounds,
+            frame: (frame.width, frame.height),
+        })
+    }
+
     pub fn session(&self) -> MutexGuard<'_, Option<Session>> {
         self.session.lock().unwrap_or_else(|e| e.into_inner())
     }
@@ -216,13 +267,22 @@ impl CaptureState {
 
     /// Drops the frames of `session` and allows the next capture. `None` if that capture already
     /// ended; otherwise the app to give focus back to.
+    #[cfg(test)]
     fn end(&self, session: u64) -> Option<Option<AppId>> {
+        self.end_keeping_lock(session, false)
+    }
+
+    /// `end`, optionally leaving the capture lock held: a recording that starts from this capture
+    /// takes it over, so no screenshot or second recording can slip in between.
+    fn end_keeping_lock(&self, session: u64, keep_lock: bool) -> Option<Option<AppId>> {
         let mut guard = self.session();
         if guard.as_ref()?.id != session {
             return None;
         }
         let previous = guard.take().and_then(|s| s.previous_app);
-        self.busy.store(false, Ordering::Release);
+        if !keep_lock {
+            self.busy.store(false, Ordering::Release);
+        }
         Some(previous)
     }
 
@@ -276,10 +336,16 @@ pub struct FrameInfo {
     pub height: u32,
     pub focused: bool,
     pub region: Option<PixelRect>,
+    pub mode: Mode,
 }
 
 /// Captures all displays and shows the overlays. Returns immediately; capture runs on a thread.
 pub fn start(app: &AppHandle) {
+    start_with_mode(app, Mode::Capture);
+}
+
+/// `start`, for choosing a region to record (`Mode::Record`) or to capture.
+pub fn start_with_mode(app: &AppHandle, mode: Mode) {
     let started = Instant::now();
     let state = app.state::<CaptureState>();
     if !state.try_begin() {
@@ -302,6 +368,7 @@ pub fn start(app: &AppHandle) {
                 eprintln!("[capture] {} display(s), {timings:?}", frames.len());
                 let focus = cursor_display(&frames);
                 Session::new(id, frames, started, focus, previous_app)
+                    .map(|session| Session { mode, ..session })
                     .map_err(|err| format!("Screen capture failed: {err}"))
             });
         let count = match session {
@@ -362,6 +429,17 @@ pub fn start_or_cancel(app: &AppHandle) {
 /// or a display change. Returns false, and touches nothing, if that capture already ended.
 /// Call on the main thread (window teardown and focus restoration belong there).
 pub fn close(app: &AppHandle, session: u64) -> bool {
+    close_keeping_lock(app, session, false)
+}
+
+/// Closes the overlays of `session` for a recording that takes over its capture lock: the same
+/// teardown as `close`, but nothing else can start a capture before the recording ends. Returns
+/// false, and touches nothing, if that capture already ended. Main thread, like `close`.
+pub fn hand_off_to_recording(app: &AppHandle, session: u64) -> bool {
+    close_keeping_lock(app, session, true)
+}
+
+fn close_keeping_lock(app: &AppHandle, session: u64, keep_lock: bool) -> bool {
     let state = app.state::<CaptureState>();
     // Still busy while the windows go, so no new capture can start in between.
     if !state.is_active(session) {
@@ -375,7 +453,7 @@ pub fn close(app: &AppHandle, session: u64) -> bool {
         }
     }
     eprintln!("[overlay] closed");
-    if let Some(Some(previous)) = state.end(session) {
+    if let Some(Some(previous)) = state.end_keeping_lock(session, keep_lock) {
         system::activate_app(previous);
     }
     precreate_in_background(app);
@@ -528,6 +606,30 @@ pub fn precreate_in_background(app: &AppHandle) {
     });
 }
 
+/// Shows or updates the recording indicator around the recorded region: a click-through border and
+/// a clock, on the recorded display. Main thread. Snipvero's windows are never in the video.
+pub fn update_recording_indicator(
+    id: u64,
+    bounds: LogicalRect,
+    region: PixelRect,
+    frame: (u32, u32),
+    text: &str,
+) {
+    #[cfg(target_os = "macos")]
+    if let Err(error) = macos::show_or_update_recording(id, bounds, region, frame, text) {
+        eprintln!("[recording] indicator: {error}");
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (id, bounds, region, frame, text);
+}
+
+pub fn hide_recording_indicator(id: u64) {
+    #[cfg(target_os = "macos")]
+    macos::hide_countdown(id);
+    #[cfg(not(target_os = "macos"))]
+    let _ = id;
+}
+
 fn fail(app: &AppHandle, message: &str) {
     eprintln!("[capture] {message}");
     let _ = app.emit(events::CAPTURE_FAILED, message);
@@ -588,6 +690,7 @@ pub fn overlay_frame_info(index: usize, state: State<CaptureState>) -> Result<Fr
         .selection
         .filter(|selection| selection.index == index)
         .and_then(|s| s.region);
+    let mode = s.mode;
     Ok(FrameInfo {
         session,
         index,
@@ -598,6 +701,7 @@ pub fn overlay_frame_info(index: usize, state: State<CaptureState>) -> Result<Fr
         height: frame.height,
         focused,
         region,
+        mode,
     })
 }
 
@@ -699,7 +803,7 @@ mod tests {
     use std::sync::Arc;
     use std::time::Instant;
 
-    use super::{CaptureState, Selection, Session, ShortcutPress, index_from_label, label};
+    use super::{CaptureState, Mode, Selection, Session, ShortcutPress, index_from_label, label};
     use crate::capture::Frame;
     use crate::geometry::{LogicalRect, PixelRect};
 
@@ -735,6 +839,7 @@ mod tests {
             selection: None,
             exporting: false,
             delayed: false,
+            mode: Mode::Capture,
         }
     }
 

@@ -15,6 +15,10 @@ pub struct Settings {
     /// Capture accelerator; `None` means the default (`shortcut::DEFAULT_ACCELERATOR`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shortcut: Option<String>,
+    /// Longest recording in seconds; `None` means the default. Clamped where it is used
+    /// (`recording::cap_from_setting`); there is no screen for it yet (ADR-037).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recording_max_seconds: Option<u32>,
 }
 
 fn path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -90,6 +94,7 @@ mod tests {
         let file = dir.join("nested").join(FILE_NAME);
         let settings = Settings {
             shortcut: Some("CommandOrControl+Alt+S".into()),
+            recording_max_seconds: Some(60),
         };
         write(&file, &settings).expect("write");
         assert_eq!(read(&file), Ok(settings));

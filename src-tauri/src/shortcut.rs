@@ -89,7 +89,7 @@ pub fn plugin() -> TauriPlugin<Wry> {
     tauri_plugin_global_shortcut::Builder::new()
         .with_handler(|app, _shortcut, event| {
             // Only one shortcut is registered; react on key down, not on release.
-            if event.state() == ShortcutState::Pressed {
+            if event.state() == ShortcutState::Pressed && !crate::recording::on_shortcut(app) {
                 crate::overlay::start_or_cancel(app);
             }
         })
@@ -235,8 +235,10 @@ fn change(app: &AppHandle, requested: Option<&str>) -> Result<ShortcutStatus, Re
         reactivate(global, &mut inner, active);
         return Err(Rejection::Unavailable);
     }
+    // Other settings (the recording cap) stay as they are.
     let stored = Settings {
         shortcut: requested.map(str::to_owned),
+        ..settings::load(app)
     };
     if let Err(e) = settings::save(app, &stored) {
         eprintln!("[shortcut] {e}");

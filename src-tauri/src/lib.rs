@@ -6,6 +6,7 @@ mod export;
 mod geometry;
 mod login_item;
 mod overlay;
+mod recording;
 mod settings;
 mod shortcut;
 mod system;
@@ -28,8 +29,16 @@ pub fn run() {
         .plugin(shortcut::plugin())
         .plugin(update::plugin())
         .manage(overlay::CaptureState::default())
+        .manage(recording::RecordingState::default())
         .manage(shortcut::ShortcutRegistry::default())
         .manage(update::UpdateState::default())
+        // The review window plays the finished recording through this, never through a file path.
+        .register_asynchronous_uri_scheme_protocol(
+            recording::PROTOCOL,
+            |ctx, request, responder| {
+                recording::serve(ctx.app_handle(), request, responder);
+            },
+        )
         .invoke_handler(tauri::generate_handler![
             overlay::overlay_frame_info,
             overlay::overlay_frame,
@@ -39,7 +48,13 @@ pub fn run() {
             overlay::overlay_cancel,
             export::overlay_copy,
             export::overlay_save,
+            recording::recording_start,
+            recording::recording_status,
+            recording::recording_discard,
+            recording::recording_save,
+            recording::recording_copy,
             app_status,
+            start_recording,
             app_info,
             start_capture,
             show_about,
@@ -59,6 +74,7 @@ pub fn run() {
             shortcut::register_saved(app.handle());
             overlay::precreate_in_background(app.handle());
             overlay::watch_displays(app.handle());
+            recording::cleanup_stale(app.handle());
             devtools::start_from_args(app.handle());
             Ok(())
         })
@@ -91,6 +107,8 @@ pub fn run() {
         RunEvent::ExitRequested {
             code: None, api, ..
         } => api.prevent_exit(),
+        // A running recording ends and the temporary recordings go with the app (ADR-037).
+        RunEvent::Exit => recording::on_exit(app),
         _ => {}
     });
 }
@@ -98,6 +116,7 @@ pub fn run() {
 pub(crate) fn handle_tray_action(app: &AppHandle, action: TrayAction) {
     match action {
         TrayAction::Capture => overlay::start(app),
+        TrayAction::Record => recording::trigger(app),
         TrayAction::Open => show_main_window(app),
         TrayAction::OpenAtLogin => tray::toggle_open_at_login(app),
         TrayAction::About => about::show(app),
@@ -162,6 +181,14 @@ fn start_capture(app: AppHandle) -> Result<(), String> {
         .map_err(|err| err.to_string())
 }
 
+/// The main window's Record Region button: the tray row, on the main thread like it.
+#[tauri::command]
+fn start_recording(app: AppHandle) -> Result<(), String> {
+    let handle = app.clone();
+    app.run_on_main_thread(move || recording::trigger(&handle))
+        .map_err(|err| err.to_string())
+}
+
 #[tauri::command]
 fn show_about(app: AppHandle) -> Result<(), String> {
     let handle = app.clone();
@@ -187,7 +214,7 @@ fn restart_app(app: AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::{ClosePolicy, MAIN_WINDOW, about, close_policy, overlay};
+    use super::{ClosePolicy, MAIN_WINDOW, about, close_policy, overlay, recording};
 
     #[test]
     fn only_the_main_window_survives_closing() {
@@ -200,7 +227,7 @@ mod tests {
     #[test]
     fn capabilities_cover_every_window() {
         let capabilities = include_str!("../capabilities/default.json");
-        for label in [MAIN_WINDOW, about::LABEL, "overlay-*"] {
+        for label in [MAIN_WINDOW, about::LABEL, recording::LABEL, "overlay-*"] {
             assert!(capabilities.contains(&format!("\"{label}\"")), "{label}");
         }
         // Both windows size themselves to their content (useFitWindow).

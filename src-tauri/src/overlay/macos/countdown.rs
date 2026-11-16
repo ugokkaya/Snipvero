@@ -1,5 +1,6 @@
 //! A native, click-through, nonactivating indicator. Reusing the opaque capture webviews here
 //! would cover the live app or take focus, dismissing the dropdown the user wants to capture.
+//! The same panel shows the clock of a running recording (ADR-037), in red.
 
 use std::cell::RefCell;
 
@@ -32,12 +33,53 @@ fn rect(rect: LogicalRect, height: f64) -> NSRect {
     )
 }
 
+/// The countdown's colour, and the recording's.
+const COUNTDOWN: (f64, f64, f64) = (0.39, 0.40, 0.95);
+const RECORDING: (f64, f64, f64) = (0.92, 0.22, 0.22);
+
 pub fn show_countdown(
     session: u64,
     bounds: LogicalRect,
     region: PixelRect,
     frame: (u32, u32),
     seconds: u64,
+) -> Result<(), String> {
+    show_indicator(
+        session,
+        bounds,
+        region,
+        frame,
+        &format!("Capture in {seconds}s"),
+        COUNTDOWN,
+    )
+}
+
+/// Shows the recording indicator, or only changes its text when `session` already has one.
+pub fn show_or_update_recording(
+    session: u64,
+    bounds: LogicalRect,
+    region: PixelRect,
+    frame: (u32, u32),
+    text: &str,
+) -> Result<(), String> {
+    let shown = INDICATOR.with_borrow(|current| {
+        current.as_ref().filter(|i| i.session == session).map(|i| {
+            i.label.setStringValue(&NSString::from_str(text));
+        })
+    });
+    if shown.is_some() {
+        return Ok(());
+    }
+    show_indicator(session, bounds, region, frame, text, RECORDING)
+}
+
+fn show_indicator(
+    session: u64,
+    bounds: LogicalRect,
+    region: PixelRect,
+    frame: (u32, u32),
+    text: &str,
+    accent: (f64, f64, f64),
 ) -> Result<(), String> {
     let mtm = MainThreadMarker::new().ok_or("countdown must be configured on the main thread")?;
     let primary_height = NSScreen::screens(mtm)
@@ -77,7 +119,7 @@ pub fn show_countdown(
             NSSize::new(bounds.width, bounds.height),
         ),
     );
-    let accent = NSColor::colorWithSRGBRed_green_blue_alpha(0.39, 0.40, 0.95, 1.0);
+    let accent = NSColor::colorWithSRGBRed_green_blue_alpha(accent.0, accent.1, accent.2, 1.0);
     let border = NSBox::initWithFrame(NSBox::alloc(mtm), rect(border_rect, bounds.height));
     border.setBoxType(NSBoxType::Custom);
     border.setTitlePosition(NSTitlePosition::NoTitle);
@@ -93,8 +135,7 @@ pub fn show_countdown(
     badge.setCornerRadius(6.0);
     badge.setFillColor(&accent);
     content.addSubview(&badge);
-    let label =
-        NSTextField::labelWithString(&NSString::from_str(&format!("Capture in {seconds}s")), mtm);
+    let label = NSTextField::labelWithString(&NSString::from_str(text), mtm);
     let mut label_rect = rect(badge_rect, bounds.height);
     label_rect.origin.y += 5.0;
     label_rect.size.height -= 5.0;

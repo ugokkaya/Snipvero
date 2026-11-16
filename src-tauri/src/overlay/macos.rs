@@ -17,7 +17,7 @@ use tauri::WebviewWindow;
 use crate::geometry::LogicalRect;
 
 mod countdown;
-pub use countdown::{hide_countdown, show_countdown, update_countdown};
+pub use countdown::{hide_countdown, show_countdown, show_or_update_recording, update_countdown};
 
 /// Raises the overlay above the menu bar, lets it appear over full-screen apps, and makes it
 /// cover `bounds` exactly. Tauri's `always_on_top` level is below the menu bar.

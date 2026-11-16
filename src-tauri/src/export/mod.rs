@@ -146,9 +146,14 @@ pub fn parse_region(value: &str) -> Result<PixelRect, String> {
 /// The suggested name comes from the page (it knows the local time); accept only a plain
 /// `*.png` file name, never a path.
 pub fn valid_file_name(name: &str) -> bool {
+    valid_file_name_with(name, ".png")
+}
+
+/// `valid_file_name` for another extension (`.mp4` for recordings).
+pub fn valid_file_name_with(name: &str, extension: &str) -> bool {
     name.len() <= MAX_FILE_NAME
-        && name.len() > ".png".len()
-        && name.ends_with(".png")
+        && name.len() > extension.len()
+        && name.ends_with(extension)
         && !name.starts_with('.')
         && name
             .bytes()
@@ -165,6 +170,15 @@ pub fn valid_file_name(name: &str) -> bool {
 pub fn write_replacing(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
 
+    replace_with(path, |file| file.write_all(bytes))
+}
+
+/// `write_replacing` for content that is produced into the sibling file, so a recording is copied
+/// to its destination without being held in memory.
+pub fn replace_with(
+    path: &Path,
+    fill: impl FnOnce(&mut std::fs::File) -> std::io::Result<()>,
+) -> std::io::Result<()> {
     let name = path
         .file_name()
         .ok_or_else(|| std::io::Error::other("no file name"))?;
@@ -178,8 +192,7 @@ pub fn write_replacing(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
         options.mode(existing.mode() & 0o777);
     }
     let (partial, mut file) = create_partial(path, name, &options)?;
-    let result = file
-        .write_all(bytes)
+    let result = fill(&mut file)
         .and_then(|()| file.sync_all())
         .and_then(|()| {
             drop(file);

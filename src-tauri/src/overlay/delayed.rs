@@ -81,6 +81,7 @@ impl Session {
         }
         let mut next = Session::new(id, frames, Instant::now(), index, self.previous_app)?;
         next.select(index, selection.region)?;
+        next.mode = self.mode;
         Ok(next)
     }
 }

@@ -23,7 +23,7 @@ use crate::geometry::{LogicalRect, physical_size};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 /// `kCVPixelFormatType_32BGRA`.
-const PIXEL_FORMAT_BGRA: u32 = u32::from_be_bytes(*b"BGRA");
+pub(crate) const PIXEL_FORMAT_BGRA: u32 = u32::from_be_bytes(*b"BGRA");
 /// `SCStreamErrorUserDeclined`.
 const ERROR_USER_DECLINED: isize = -3801;
 
@@ -45,12 +45,7 @@ pub fn capture_displays() -> Result<(Vec<Frame>, CaptureTimings), CaptureError> 
     let enumerate_ms = elapsed_ms(started);
 
     // Exclude our own windows (main window, stale overlays) from the frozen image.
-    let own_pid = std::process::id() as i32;
-    let own_apps: Vec<Retained<SCRunningApplication>> = unsafe { content.applications() }
-        .iter()
-        .filter(|app| unsafe { app.processID() } == own_pid)
-        .collect();
-    let excluded_apps = NSArray::from_retained_slice(&own_apps);
+    let excluded_apps = own_applications(&content);
     let no_windows = NSArray::new();
 
     // Issue all display captures before waiting, so the displays are frozen at about the same time.
@@ -123,7 +118,20 @@ pub fn capture_displays() -> Result<(Vec<Frame>, CaptureTimings), CaptureError> 
     ))
 }
 
-fn shareable_content() -> Result<Retained<SCShareableContent>, CaptureError> {
+/// Snipvero itself, for the content filters: its windows (overlays, indicator, review) never
+/// appear in a screenshot or a recording (ADR-008, ADR-037).
+pub(crate) fn own_applications(
+    content: &SCShareableContent,
+) -> Retained<NSArray<SCRunningApplication>> {
+    let own_pid = std::process::id() as i32;
+    let own_apps: Vec<Retained<SCRunningApplication>> = unsafe { content.applications() }
+        .iter()
+        .filter(|app| unsafe { app.processID() } == own_pid)
+        .collect();
+    NSArray::from_retained_slice(&own_apps)
+}
+
+pub(crate) fn shareable_content() -> Result<Retained<SCShareableContent>, CaptureError> {
     let (tx, rx) = mpsc::sync_channel(1);
     let handler = RcBlock::new(
         move |content: *mut SCShareableContent, error: *mut NSError| {
