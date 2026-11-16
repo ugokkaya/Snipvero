@@ -33,7 +33,9 @@ index.html, src/              React frontend (every window loads index.html)
                               only a Record button when the overlay was opened to choose a region to record
   recording/RecordingAudio.tsx   the two sound switches of the main window, microphone guidance
   recording/audio.ts          pure microphone view state and sound label
-  recording/RecordingReview.tsx  review window: video preview, Save…, Copy File/Path, Export as GIF… (disabled), Discard
+  recording/RecordingReview.tsx  review window: video preview, Save…, Copy File/Path, Export as GIF… (panel), Discard
+  recording/GifExport.tsx     the GIF export panel: frame rate, width, estimate, progress, Cancel
+  recording/gif.ts            pure width/rate choices, estimate wording, `*.gif` file name
   recording/format.ts         pure clock, byte size and `*.mp4` file name formatting
   overlay/selection.ts        pure selection model: state machine, hit testing, cursors, resizeRect
   overlay/annotations.ts      pure annotation data and geometry (arrow head, bounds, hit tests, styles)
@@ -80,6 +82,9 @@ src-tauri/
   src/recording/macos.rs      SCStream + AVAssetWriter (H.264 MP4), free space, clipboard
   src/recording/macos/audio.rs  optional audio: SCK system audio and AVCaptureSession microphone decoded to
                               stereo f32, AAC writer input, permission lookup/request (ADR-037)
+  src/recording/gif.rs        pure GIF export: limits, plan and size estimate, timeline resampling, box downscale,
+                              delays, `gif` encoder (tested on every OS)
+  src/recording/macos/reader.rs  MP4 → BGRA pictures through AVAssetReader (the GIF export's frame source)
   src/recording/mixer.rs      pure mixing: timeline alignment on the host clock, gap filling, limiter, format
                               conversion, resampling (tested on every OS)
   src/recording/windows.rs    unsupported stub (compiles only)
@@ -312,7 +317,16 @@ One pipeline: a region of one display becomes a temporary MP4 (ADR-037).
 5. The review window plays the file through the `snipvero-recording` protocol (`recording::serve`, range requests,
    only the finished recording with the given id) and offers Save (native dialog from Rust, hidden sibling file
    renamed over the target, then the temporary file is deleted), Copy File / Copy Path, Discard. The page knows an id, never a path.
-6. The temporary folder `<per-user temp>/com.snipvero.app/recordings-<pid>-<nonce>/` is private (0700), created at the
+6. **GIF export (ADR-037, task 4)** is an export of the finished MP4, not a second pipeline. `recording_gif_plan` asks
+   `gif::plan` for the output size and estimate (or the reason it is refused: over 60 s, a rate above 15, a width above
+   800 px or the video's). `recording_export_gif` re-checks, holds the recording's `saving` guard, asks for a `*.gif` name
+   with `rfd`, then a worker runs `gif::export`: `macos/reader.rs` decodes the MP4 picture by picture (BGRA, locked,
+   handed over, released), `GifWriter` scales each picture with a box filter, resamples the video's timeline to a fixed
+   clock of `fps` ticks (timing from timestamps, so a still screen is one long frame), merges identical neighbours and
+   writes frames with the `gif` crate into a hidden sibling file that `export::replace_with` renames over the target.
+   `recording-export-progress` reports the fraction (about ten per second); `recording_cancel_gif_export` sets a flag the
+   reader checks before every picture. At most three scaled pictures are in memory. The MP4 is untouched.
+7. The temporary folder `<per-user temp>/com.snipvero.app/recordings-<pid>-<nonce>/` is private (0700), created at the
    first recording, removed at exit (`RunEvent::Exit`) and, for crashes, at the next launch.
 
 ## Updates

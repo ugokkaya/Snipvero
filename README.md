@@ -26,7 +26,7 @@ check for updates.
 - **Annotations:** arrows, outlined rectangles and text in six colours and three sizes. Select,
   move, resize, re-edit and delete them, with full undo and redo. Text supports any language your
   keyboard can type.
-- **Screen recording (macOS):** record any region of one display as an MP4 video (H.264, 30 fps), with optional system audio and microphone.
+- **Screen recording (macOS):** record any region of one display as an MP4 video (H.264, 30 fps), with optional system audio and microphone, or export it as a GIF.
   See [Screen recording](#screen-recording).
 - **Sharp on Retina:** the image keeps the display's full pixel resolution, including setups that
   mix Retina and standard displays.
@@ -204,9 +204,15 @@ a red dot with the elapsed time.
   size (rounded down to even numbers), so the region must be at least 16 × 16 pixels and no larger than
   8192 pixels per side and about 9.4 megapixels (for example 3840 × 2160). Larger regions are refused with a message.
 - When it ends, a window plays the recording back. **Save…** writes an MP4 where you choose, **Copy File** and
-  **Copy Path** put the file or its location on the clipboard, and **Discard** deletes it. **Export as GIF…**
-  is shown but not available yet. Closing the window keeps the recording until you save it, discard it or
-  quit; **Review Last Recording…** in the menu bar reopens it. You cannot start another recording meanwhile.
+  **Copy Path** put the file or its location on the clipboard, and **Discard** deletes it. Closing the window
+  keeps the recording until you save it, discard it or quit; **Review Last Recording…** in the menu bar reopens it.
+  You cannot start another recording meanwhile.
+- **Export as GIF…** makes a GIF from the recording: choose a frame rate (5, 10 or 15 fps, 10 by default) and a
+  width (up to 800 pixels and never wider than the video; the default is the region's width in points, so a
+  Retina recording is not doubled). The window shows the size and an estimate of the file size before you
+  save, then a progress bar and **Cancel export**. A GIF is made from at most 60 seconds of video; for a longer
+  recording Snipvero says so and you can save the MP4 instead. A still screen becomes one frame that lasts as
+  long as the recording. The GIF is its own file: the recording is untouched and can still be saved as MP4.
 - Annotations are not part of a video. Windows has no recording yet.
 - The longest length can be changed by adding `"recordingMaxSeconds": 120` (10 to 600) to `settings.json`.
 
@@ -292,7 +298,8 @@ If another app already uses the shortcut, the Snipvero window says so; choose an
   The exception is a screen recording, which is too large for memory: while it is made and until you
   save or discard it, it is a temporary file in a private folder of your user account
   (`com.snipvero.app` in the per-user temporary folder). It is deleted when you save it, discard it,
-  quit Snipvero, and at the next launch if Snipvero was force-quit. It is never uploaded.
+  quit Snipvero, and at the next launch if Snipvero was force-quit. It is never uploaded. A GIF export
+  writes only the file you choose (through a hidden file next to it that is renamed, or removed if you cancel).
 - A capture shortcut you choose is stored in `~/Library/Application Support/com.snipvero.app/settings.json`.
   The file holds only the shortcut and, if you set them, the recording length and the two sound switches.
 - Copying puts the image on the system clipboard, where other apps can read it, as with any copy.
@@ -303,7 +310,7 @@ If another app already uses the shortcut, the Snipvero window says so; choose an
 - A selection stays on one display; it cannot span several displays.
 - Only the capture shortcut and Open at Login can be changed: colours and sizes are fixed.
 - Unplugging or rearranging displays during a capture ends that capture.
-- Recording is macOS only, silent, and limited to one region of one display (5K and larger displays can
+- Recording is macOS only and limited to one region of one display (5K and larger displays can
   record parts of their screen, not all of it). Only one unsaved recording is kept at a time.
 - Apple silicon only; Intel Macs are untested.
 

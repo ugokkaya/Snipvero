@@ -880,7 +880,8 @@ Homebrew installation, Windows runtime support or runtime QA of the notarized di
 - **Status:** proposed (2026-11-16); **task 2 (silent MP4 recording on macOS) implemented and partly verified
   on macOS only** (see "Task 2 outcome" below for what was measured and what was not). **Task 3 (optional audio) implemented
   on macOS; system audio and the entitlement behaviour measured, the microphone path built but not run against a granted
-  microphone** (see "Task 3 outcome"). Task 4 (GIF) is not started; everything about it is still a design and unverified. The API facts below come from the `objc2-*`
+  microphone** (see "Task 3 outcome"). **Task 4 (GIF export) implemented on macOS; the crate, the decoder, the timing and the encoder were measured
+  against real recordings, the save dialog, the progress events and the review-window panel were not driven by hand** (see "Task 4 outcome"). The API facts below come from the `objc2-*`
   0.3.2 bindings in the local registry and Apple's documentation. macOS is the target; Windows must keep compiling
   (unsupported stubs, type-checked against the shared code but not built on Windows).
 - **Context:** the user asked for screen recording. Decisions already taken with the user:
@@ -1029,19 +1030,21 @@ Homebrew installation, Windows runtime support or runtime QA of the notarized di
 
 ### IPC names (mirrored in `src/ipc.ts` and `src-tauri/src/events.rs`)
 
-| Kind    | Name                        | Direction / payload                                                                                                           |
-| ------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| command | `recording_start`           | page → Rust: `{ session, region: PixelRect, systemAudio: bool, microphone: bool }` → `RecordingInfo`                          |
-| command | `recording_stop`            | page/tray → Rust: stop and finalize; returns the finished `RecordingInfo`                                                     |
-| command | `recording_discard`         | page → Rust: `{ id }` delete the temp file                                                                                    |
-| command | `recording_save`            | page → Rust: `{ id }` opens the native save dialog; Rust copies/moves the temp file to the chosen `*.mp4`                     |
-| command | `recording_export_gif`      | page → Rust: `{ id, options }` runs the GIF export (task 4), save dialog from Rust                                            |
-| command | `recording_status`          | page → Rust: current state, elapsed ms, cap, audio availability (also used for the permission rows in the main window)        |
-| command | `recording_set_audio`       | page → Rust: `{ kind: "system" \| "microphone", enabled }` validates permission, persists the setting, returns the new status |
-| event   | `recording-state`           | Rust → main/review window: `RecordingStatus` on every state change (not per frame)                                            |
-| event   | `recording-progress`        | Rust → windows, at most 2 per second: elapsed ms, file bytes                                                                  |
-| event   | `recording-failed`          | Rust → main window: user-facing message (disk full, permission lost, encoder error)                                           |
-| event   | `recording-export-progress` | Rust → review window: GIF export fraction 0..1, then done/failed                                                              |
+| Kind    | Name                          | Direction / payload                                                                                                                |
+| ------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| command | `recording_start`             | page → Rust: `{ session, region: PixelRect, systemAudio: bool, microphone: bool }` → `RecordingInfo`                               |
+| command | `recording_stop`              | page/tray → Rust: stop and finalize; returns the finished `RecordingInfo`                                                          |
+| command | `recording_discard`           | page → Rust: `{ id }` delete the temp file                                                                                         |
+| command | `recording_save`              | page → Rust: `{ id }` opens the native save dialog; Rust copies/moves the temp file to the chosen `*.mp4`                          |
+| command | `recording_export_gif`        | page → Rust: `{ id, fileName, options }` runs the GIF export (task 4), save dialog from Rust; answers `{ outcome, bytes, frames }` |
+| command | `recording_gif_plan`          | page → Rust: `{ id, options }` → output size and size estimate, or the reason it cannot be made (added in task 4)                  |
+| command | `recording_cancel_gif_export` | page → Rust: `{ id }` stops a running export (added in task 4)                                                                     |
+| command | `recording_status`            | page → Rust: current state, elapsed ms, cap, audio availability (also used for the permission rows in the main window)             |
+| command | `recording_set_audio`         | page → Rust: `{ kind: "system" \| "microphone", enabled }` validates permission, persists the setting, returns the new status      |
+| event   | `recording-state`             | Rust → main/review window: `RecordingStatus` on every state change (not per frame)                                                 |
+| event   | `recording-progress`          | Rust → windows, at most 2 per second: elapsed ms, file bytes                                                                       |
+| event   | `recording-failed`            | Rust → main window: user-facing message (disk full, permission lost, encoder error)                                                |
+| event   | `recording-export-progress`   | Rust → review window: `{ id, phase: running\|done\|cancelled\|failed, fraction 0..1, message }`, at most ~10 per second            |
 
 Constants live in `events.rs` and `ipc.ts` with the existing "keep in sync" comments; the commands are registered
 in `lib.rs`. All commands validate the session / recording id like `overlay_*` (ADR-019): a stale id is refused,
@@ -1056,7 +1059,8 @@ src-tauri/src/recording/
   macos.rs      SCStream + SCStreamOutput delegate + AVAssetWriter + microphone session (objc2)
   windows.rs    `start`/`stop` return `RecordingError::Unsupported`; compiles with CI only
   mixer.rs      pure PCM mixing/alignment (tested on both OSes, no platform imports)
-  gif.rs        pure GIF export: frame decimation, scaling, palette, `gif` encoder (task 4); the MP4 → frames reader is in macos.rs
+  gif.rs        pure GIF export: limits, plan and size estimate, timeline resampling, box downscale, delays, `gif` encoder (task 4)
+  macos/reader.rs  the MP4 → BGRA pictures frame source (`AVAssetReader`), a submodule of macos.rs like audio.rs
   tempfiles.rs  private temp dir creation, stale cleanup, free-space check (pure parts tested)
 src-tauri/src/system/macos.rs   + microphone settings URL; src-tauri/src/tray.rs  + Start/Stop Recording
 src/recording/                  RecordingBar/ReviewWindow, pure state/formatting helpers, tests
@@ -1187,6 +1191,73 @@ Deviations and decisions taken while building it:
   path; unconfirmed here), (2) long-run A/V drift over 5–10 minutes (the design tolerates ≈ 30 ms in ten minutes), (3) macOS 14 and 15 (only macOS 27 ran),
   (4) notarized builds and Windows (stubs only; `cargo check` for the MSVC target could not run here: no C compiler for `ring`).
 
+### Task 4 outcome (GIF export, macOS)
+
+**Crate verification (the criteria above, checked before adding `gif`).** `cargo tree -e normal --format "{p} {l}"` for `gif = { version = "0.14", default-features = false,
+features = ["std", "color_quant"] }`: `gif 0.14.2` (`MIT OR Apache-2.0`) → `color_quant 1.1.0` (`MIT`), `weezl 0.1.12` (`MIT OR Apache-2.0`). Nothing else.
+
+1. Licences: all three inside the policy; `pnpm notices:check` passes with the regenerated file (334 Rust components, licences allowed).
+2. Pure Rust, no build script, no C, no network or HTTP code (read: its sources are the encoder, the decoder and `common.rs`, about 108 KB); it builds wherever the rest does.
+3. Maintained: 0.14.2 was published on 2026-04-09 (crates.io), `rust-version = 1.62`, edition 2021, well below our 1.90.
+4. Tree: `Cargo.lock` gains **two** packages (`gif`, `color_quant`); `weezl` was in the lock already (`arboard` → `image` → `tiff`, Windows only) but is compiled on macOS for the first time,
+   so three small crates are new in a macOS build. Default features are off; `raii_no_panic` (a panic guard on drop) is not enabled; `std` and `color_quant` are the two the code needs.
+5. It writes per-frame local palettes with delays, the NETSCAPE loop extension and disposal, and `Frame::from_rgba_speed` uses the **exact** palette when a picture has at most 256 colours
+   (most screen content) and NeuQuant otherwise, so no second quantizer crate is needed.
+
+Binary size: the release executable (LTO, `codegen-units = 1`, stripped) grew from 6 420 752 to 6 504 288 bytes, **+83 536 bytes (+1.3 %)**, for the whole of task 4 (the two crates and `weezl`, the pure module, the
+reader and the commands), measured against a clean build of the previous commit. The crates alone are therefore under that.
+
+**Design as built.**
+
+- **Reader.** `macos/reader.rs`: `AVURLAsset` of the temporary MP4 → `AVAssetReader` + `AVAssetReaderTrackOutput` with `kCVPixelBufferPixelFormatTypeKey = 32BGRA`, `alwaysCopiesSampleData = NO`.
+  Each sample's `CVPixelBuffer` is locked read-only, handed to the callback with its stride and presentation time and unlocked, inside one autorelease pool per picture. The pool matters on a worker thread
+  with no run loop: without it every picture's autoreleased objects would live until the export ends. The cancel flag is checked before every picture.
+  `tracksWithMediaType:` is deprecated since macOS 15 in favour of an asynchronous loader that needs a completion block and a run loop; a finished local file is ready at once, so the synchronous call
+  is used with `#[allow(deprecated)]` and works on 14 and later. `objc2-core-video` is named directly (already in the tree); `objc2-av-foundation` gains `AVAsset`, `AVAssetReader`, `AVAssetReaderOutput`,
+  `AVAssetTrack`, and `objc2-core-media` its `objc2-core-video` feature. No new crate beyond `gif` and `color_quant`.
+- **Timing comes from timestamps.** The output is sampled on a fixed clock of `fps` ticks over the recording's own length (`Finished::duration`, which the writer set from the host clock, not the
+  frame count). Each tick shows the newest picture at or before it; ticks that show the same picture are one GIF frame whose delay is their total. A still screen (SCK sends nothing) is therefore **one frame
+  with the whole length as its delay**, which is how the measurement below came out. A picture that is replaced before any tick looks at it is dropped. Delays are rounded on the cumulative time, not per frame,
+  so 15 fps (6.67 cs per tick) does not make a minute 4 s too long (test: 900 ticks sum to exactly 6000 cs); every delay is at least 6 cs, above the 2 cs that browsers still honour. Identical
+  neighbouring pictures (compared after scaling) are merged as well, which also covers the held last picture (`hold_last_picture`, with sound on).
+- **Scaling.** A box filter (each output pixel is the mean of the source pixels it covers), never nearest-neighbour, so text and thin lines survive. Output width is chosen from the limits and the aspect
+  ratio is kept; no upscaling (the width cannot exceed the video's).
+- **Limits (all enforced in Rust by `gif::plan`, and the page only displays its answer).** At most 15 fps (choices 5, 10, 15; default 10), width at most 800 px and the video's own width, at least 16 px, source
+  at most 60 s (`TooLong`: "This recording is 1:20 long. A GIF can be made from at most 60 seconds of video; save it as an MP4 instead."). The default width is the region's width in **display points** (1×, so a Retina
+  recording is not doubled), capped; `RecordingStatus` carries `gifMaxWidth`, `gifDefaultWidth` and `gifDefaultFps` so the page has no copy of these numbers. A recording over 60 s opens the panel with that message
+  and no Export button.
+- **Memory.** Streamed: the decoder's picture is scaled the moment it arrives and released; the writer holds at most three scaled pictures (one waiting for its duration, one waiting to be merged or written, one being built).
+  The length of the source does not change that; it is bounded only by the 60 s limit on time.
+- **Save flow.** The options are validated first (a too-long recording never opens a dialog), then `rfd` asks for the file (`*.gif` only; suggested plain name `Snipvero-<date>.gif`, validated by
+  `export::valid_file_name_with`), then the export runs on a worker into a hidden sibling file renamed over the target by `export::replace_with` (ADR-019), so a cancelled or failed export leaves no
+  partial file and never damages an existing one. The recording's `saving` guard is held for the whole time (no Save, Discard or second export under it). **The MP4 is never touched and the recording is not
+  discarded** after a GIF: the user can still Save the MP4 afterwards.
+- **UI.** **Export as GIF…** opens a panel in the review window: frame rate, width, the size line (`600 × 400 px, up to about 4.2 MB`), then **Export…**, a progress bar with **Cancel export**, the result
+  (`GIF saved (2.5 MB, 24 frames).`) or the error. Other buttons of the window are disabled while it runs.
+- **IPC.** Three additions to the table: `recording_gif_plan` (so the estimate and the limits are computed once, in Rust), `recording_cancel_gif_export`, and the answer of `recording_export_gif`
+  (`{ outcome, bytes, frames }`). `recording-export-progress` carries `{ id, phase, fraction, message }`.
+- **Windows.** `read_pictures` is a stub returning "not available on this platform"; `recording_export_gif` refuses before any dialog. The pure module compiles everywhere and its tests run on every OS
+  (the `cargo check --target x86_64-pc-windows-msvc` could not run here: no C compiler for `ring`, as in task 3).
+
+**Measured, macOS 27.2, Apple silicon, three displays, from a terminal with Screen Recording (the screen was unlocked this time):**
+
+- **Real still screen (ignored test `exports_a_recording_as_a_gif`, 3 s and 5 s regions of a static desktop):** the MP4 has **1 picture**; the reader returned 1 picture; the GIF has **1 frame** whose delay is 300 cs /
+  500 cs, 10 173 bytes at 240 × 180. This is the case the ticket warned about: the length comes from the stamps and the recording's duration, not from the frame count.
+- **Real moving content** (a test window with a moving block and a counter at 30 Hz in the region, which stopped after 2.28 s of the 5 s recording): 65 pictures, stamps 0.00–2.28 s at about 30 fps, then the still
+  desktop; **24 GIF frames** (23 ticks of motion at 10 fps plus the held ending), delays sum to **500 cs (5.0 s)**, 135 107 bytes at 240 × 180, decoded in 1.6 s in a _debug_ build. The first frame was looked at
+  (scaled from 320 to 240 px, text legible). Per moving frame the output was about 5.6 KB for 43 200 pixels, i.e. 0.13 bytes per pixel per frame: `ESTIMATE_BYTES_PER_PIXEL` is **0.14**, a deliberately upper-ish figure
+  (ticks that repeat or flat content cost much less, so the estimate says "up to about").
+- **Worst case (ignored test `worst_case_export_time_and_size`, release):** 60 s of 1920 × 1080 pictures that all change, 15 fps, 800 px wide: **900 frames, 33.4 MB, 34.8 s** (including generating the 900 test
+  pictures, so the export is somewhat under that) and a **peak resident size of 28 MB** (19.7 MB footprint). The plan's estimate for that case was 45.4 MB, an upper bound as intended. The reader
+  does not hold more than one decoded picture at a time, so the 28 MB does not grow with the number of pictures.
+- **Cancel:** with the flag set before the first picture, the real reader stops with `Cancelled` and the export reports it; the MP4 compared byte for byte before and after the export was identical.
+
+**Not verified:** the save dialog and the whole command path through the review window (the panel, progress events, Cancel by hand, the result line) were not driven with real clicks and the page was
+not run in the app, only in its unit tests with a mocked `ipc`; a GIF opened in Safari, Chrome and Preview (only decoded with the `gif` crate's decoder, `sips` and by eye as a still); the 60 s limit with a real
+60 s recording (the plan refuses it in tests); a Retina region vs a 1× one for the default width (the arithmetic is tested; no 1× display here); an MP4 recorded with sound (the reader only asks for the video
+track, and the held picture merges, but a recording with audio was not exported); macOS 14 and 15 (only 27 ran); memory over a long source (the 60 s limit prevents one; the 28 MB peak is the 60 s worst case);
+notarized builds; Windows (a stub, compiled by CI only).
+
 ### Plan for tasks 2–4 (follow in order; each ends with `pnpm check` and the cargo trio)
 
 **Task 2: video (MP4, no audio)**
@@ -1228,5 +1299,4 @@ Deviations and decisions taken while building it:
 3. `recording_export_gif` + `recording-export-progress`, save dialog (`*.gif` only, plain suggested name as `rfd` today), UI: fps/width choice, size estimate, progress, cancel, error.
 4. QA and docs: file plays in browsers/Preview, memory stays bounded for a 5-minute source (frames streamed, never all held), temp file untouched, README/ARCHITECTURE/REQUIREMENTS updates and the status line of this ADR.
 
-- **Verification so far:** task 2 as listed under "Task 2 outcome", task 3 as listed under "Task 3 outcome". For task 4, nothing beyond reading the code and
-  bindings. Still unverified: notarization acceptance of the entitlement, two tracks vs. the mixer in QuickTime, macOS 14/15 behaviour, the live microphone.
+- **Verification so far:** task 2 as listed under "Task 2 outcome", task 3 as listed under "Task 3 outcome", task 4 as listed under "Task 4 outcome". Still unverified: notarization acceptance of the entitlement, two tracks vs. the mixer in QuickTime, macOS 14/15 behaviour, the live microphone.

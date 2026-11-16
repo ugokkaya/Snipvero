@@ -8,7 +8,11 @@
   the menu bar or the main window, or from the record button of the screenshot toolbar; stop from the menu bar,
   the capture shortcut or the maximum length (five minutes by default). A review window plays the recording and offers
   Save, Copy File, Copy Path and Discard. The recording is a private temporary file, deleted when saved,
-  discarded, on quit and at the next launch. Audio and GIF export are not available yet.
+  discarded, on quit and at the next launch.
+- macOS: optional system audio and microphone for recordings, two separate switches that are off by default.
+- macOS: **Export as GIF…** in the recording window. Choose 5, 10 or 15 fps (10 by default) and a width up to 800 pixels;
+  the window shows the size and an estimate, then progress with Cancel. GIFs are made from at most 60 seconds of video.
+  The MP4 is not changed.
 
 ## 0.1.0-beta.9 — 2026-11-15
 
