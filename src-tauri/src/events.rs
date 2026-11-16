@@ -18,3 +18,7 @@ pub const RECORDING_STATE: &str = "recording-state";
 /// Emitted with a user-facing message when a recording cannot start or ends without a file
 /// (permission lost, disk full, encoder error).
 pub const RECORDING_FAILED: &str = "recording-failed";
+
+/// Sent to the recording review window while a GIF export runs: `{ id, phase, fraction, message }`,
+/// at most about ten times a second, then once with `done`, `cancelled` or `failed`.
+pub const RECORDING_EXPORT_PROGRESS: &str = "recording-export-progress";

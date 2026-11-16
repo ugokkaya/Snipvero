@@ -45,6 +45,7 @@ open -n --stderr /tmp/snipvero.log src-tauri/target/release/bundle/macos/Snipver
 tccutil reset ScreenCapture com.snipvero.app                                    # reset the grant
 tccutil reset Microphone com.snipvero.app                                       # reset the microphone grant
 # --stress-record=N --stress-record-audio=system,microphone records with sound (the microphone needs its grant)
+# cd src-tauri && cargo test -- --ignored --nocapture exports_a_recording_as_a_gif   # real SCK recording → GIF (SNIPVERO_TEST_MAIN_DISPLAY=1 picks the main display)
 ```
 
 Recording with the microphone needs the `com.apple.security.device.audio-input` entitlement

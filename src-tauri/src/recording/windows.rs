@@ -2,7 +2,9 @@
 //! says so (ADR-037). Other non-macOS systems use it as well.
 
 use std::path::Path;
+use std::sync::atomic::AtomicBool;
 
+use super::gif::{Picture, ReadError};
 use super::{Finalized, MicrophoneAccess, RecordingError, StartRequest};
 
 pub const SUPPORTED: bool = false;
@@ -40,4 +42,13 @@ pub fn microphone_access() -> MicrophoneAccess {
 
 pub fn request_microphone_access(done: Box<dyn FnOnce(bool) + Send>) {
     done(false);
+}
+
+/// No frame source on this platform: a GIF cannot be made.
+pub fn read_pictures(
+    _path: &Path,
+    _cancel: &AtomicBool,
+    _on_picture: &mut dyn FnMut(Picture<'_>) -> Result<(), String>,
+) -> Result<(), ReadError> {
+    Err(ReadError::Failed(RecordingError::Unsupported.to_string()))
 }

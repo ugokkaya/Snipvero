@@ -9,6 +9,7 @@
 //! can never be appended to a finished writer.
 
 mod audio;
+mod reader;
 
 use std::path::Path;
 use std::ptr::{self, NonNull};
@@ -42,6 +43,7 @@ use objc2_screen_capture_kit::{
 
 use self::audio::{LATENCY_FRAMES, Microphone, Pipeline};
 pub use self::audio::{microphone_access, request_microphone_access};
+pub use self::reader::read_pictures;
 use super::mixer::{SAMPLE_RATE, Source};
 use super::{Finalized, RecordingError, StartRequest};
 use crate::capture::{self, PIXEL_FORMAT_BGRA};
@@ -817,6 +819,7 @@ fn write_pasteboard(item: Retained<ProtocolObject<dyn NSPasteboardWriting>>) -> 
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
     use std::sync::atomic::{AtomicBool, Ordering};
 
     use super::super::AudioChoice;
@@ -830,8 +833,23 @@ mod tests {
     #[test]
     #[ignore = "needs the Screen Recording permission"]
     fn records_a_region_to_a_finished_mp4() {
+        let (dir, _, _) = record_for_test();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Records a region as the test above describes and returns its folder, file and result.
+    fn record_for_test() -> (PathBuf, PathBuf, Finalized) {
         let (frames, _) = capture::capture_displays().expect("capture permission and a display");
-        let display_id = frames.first().expect("a display").display_id;
+        // SNIPVERO_TEST_MAIN_DISPLAY=1 records the display whose origin is (0, 0), the main one, instead
+        // of the first listed, so an animated test window can be put in front of the region.
+        let display_id = frames
+            .iter()
+            .find(|frame| {
+                std::env::var_os("SNIPVERO_TEST_MAIN_DISPLAY").is_none()
+                    || (frame.bounds.x == 0.0 && frame.bounds.y == 0.0)
+            })
+            .expect("a display")
+            .display_id;
         let dir = std::env::temp_dir().join(format!("snipvero-record-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
@@ -901,6 +919,88 @@ mod tests {
         // For looking at the result with other tools: SNIPVERO_KEEP_RECORDING=/tmp/out.mp4.
         if let Some(keep) = std::env::var_os("SNIPVERO_KEEP_RECORDING") {
             std::fs::copy(&output, keep).unwrap();
+        }
+        (dir, output, finalized)
+    }
+
+    /// Records, then exports the finished MP4 as a GIF through the real `AVAssetReader` and checks
+    /// the GIF against the recording: size, length and that the MP4 is untouched. Same permission
+    /// need as above: `cargo test -- --ignored exports_a_recording_as_a_gif`. Set
+    /// `SNIPVERO_KEEP_GIF=/tmp/out.gif` to look at the result; `SNIPVERO_TEST_SECONDS` lengthens it.
+    #[test]
+    #[ignore = "needs the Screen Recording permission"]
+    fn exports_a_recording_as_a_gif() {
+        use crate::recording::gif::{self, GifOptions};
+
+        let (dir, mp4, finalized) = record_for_test();
+        let before = std::fs::read(&mp4).unwrap();
+        let plan = gif::plan(
+            (320, 240),
+            finalized.duration,
+            GifOptions {
+                fps: 10,
+                width: 240,
+            },
+        )
+        .unwrap();
+        let cancel = AtomicBool::new(false);
+        let started = std::time::Instant::now();
+        let mut pictures = 0u32;
+        let (bytes, frames) = gif::export(
+            Vec::new(),
+            (320, 240),
+            plan,
+            |next| {
+                read_pictures(&mp4, &cancel, &mut |picture| {
+                    pictures += 1;
+                    next(picture)
+                })
+            },
+            |_| {},
+        )
+        .expect("the GIF is made");
+        println!(
+            "{pictures} decoded pictures -> {frames} GIF frames, {} bytes, {:?}, plan {plan:?}, estimate {}",
+            bytes.len(),
+            started.elapsed(),
+            plan.estimated_bytes
+        );
+        assert!(pictures > 0 && frames > 0);
+
+        let mut options = ::gif::DecodeOptions::new();
+        options.set_color_output(::gif::ColorOutput::RGBA);
+        let mut decoder = options.read_info(std::io::Cursor::new(&bytes)).unwrap();
+        assert_eq!((decoder.width(), decoder.height()), (240, 180));
+        let mut centiseconds = 0u32;
+        let mut count = 0;
+        while let Some(frame) = decoder.read_next_frame().unwrap() {
+            centiseconds += u32::from(frame.delay);
+            count += 1;
+        }
+        assert_eq!(count, frames);
+        // The GIF is as long as the recording, to the rounding of one tick: timing comes from
+        // the stamps, so a still screen with a handful of frames is not shorter.
+        let expected = finalized.duration.as_secs_f64() * 100.0;
+        assert!(
+            (f64::from(centiseconds) - expected).abs() <= 10.0,
+            "{centiseconds} cs vs {expected:.0} cs"
+        );
+        // The MP4 is read only.
+        assert_eq!(std::fs::read(&mp4).unwrap(), before);
+
+        // A cancelled export stops at the next picture.
+        cancel.store(true, Ordering::SeqCst);
+        let cancelled = gif::export(
+            Vec::new(),
+            (320, 240),
+            plan,
+            |next| read_pictures(&mp4, &cancel, next),
+            |_| {},
+        );
+        assert_eq!(cancelled.unwrap_err(), gif::ExportFailure::Cancelled);
+
+        if let Some(keep) = std::env::var_os("SNIPVERO_KEEP_GIF") {
+            std::fs::write(keep, &bytes).unwrap();
         }
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -10,8 +10,10 @@
 #![cfg_attr(not(target_os = "macos"), allow(dead_code))]
 
 use std::fmt;
+use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, MutexGuard};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime};
 
 use serde::{Deserialize, Serialize};
@@ -31,6 +33,7 @@ use crate::overlay::{self, CaptureState, Mode};
 use crate::settings;
 use crate::tray;
 
+mod gif;
 #[cfg(target_os = "macos")]
 mod macos;
 mod mixer;
@@ -94,6 +97,10 @@ pub struct RecordingStatus {
     /// Which sound sources this recording has (ADR-037); both false is a silent video.
     pub system_audio: bool,
     pub microphone: bool,
+    /// The widest GIF this recording can be exported as, and the width it starts at (ADR-037).
+    pub gif_max_width: u32,
+    pub gif_default_width: u32,
+    pub gif_default_fps: u32,
 }
 
 /// Which audio sources a recording takes. Both are off by default and independent (ADR-037).
@@ -305,6 +312,8 @@ struct Machine {
     /// A save dialog or copy is running: the file must stay.
     saving: bool,
     audio: AudioChoice,
+    /// Width of the region in display points: the GIF export's default width (1×).
+    point_width: u32,
 }
 
 impl Default for Machine {
@@ -320,6 +329,7 @@ impl Default for Machine {
             finished: None,
             saving: false,
             audio: AudioChoice::default(),
+            point_width: 0,
         }
     }
 }
@@ -348,6 +358,23 @@ impl Machine {
         if self.id == id {
             self.audio = audio;
         }
+    }
+
+    /// The width of the recording's region in display points, for the GIF export's default size.
+    fn set_point_width(&mut self, id: u64, width: u32) {
+        if self.id == id {
+            self.point_width = width;
+        }
+    }
+
+    /// The size in pixels and the length of the finished recording `id`, which a GIF is planned from.
+    fn gif_source(&self, id: u64) -> Result<((u32, u32), Duration), String> {
+        let finished = self
+            .finished
+            .as_ref()
+            .filter(|_| self.is(id, Phase::Finished))
+            .ok_or("that recording no longer exists")?;
+        Ok((self.size, finished.duration))
     }
 
     fn is(&self, id: u64, phase: Phase) -> bool {
@@ -470,6 +497,9 @@ impl Machine {
             notice: finished.and_then(|f| f.notice.clone()),
             system_audio: self.audio.system,
             microphone: self.audio.microphone,
+            gif_max_width: gif::max_width(self.size.0),
+            gif_default_width: gif::default_width(self.point_width, self.size.0),
+            gif_default_fps: gif::DEFAULT_FPS,
         }
     }
 }
@@ -510,6 +540,8 @@ pub struct RecordingState {
     launched: SystemTime,
     /// Where the recording is on screen, for the indicator.
     target: Mutex<Option<Target>>,
+    /// The running GIF export: the recording it reads and the flag that cancels it.
+    gif_cancel: Mutex<Option<(u64, Arc<AtomicBool>)>>,
 }
 
 impl Default for RecordingState {
@@ -520,6 +552,7 @@ impl Default for RecordingState {
             launch_dir: Mutex::default(),
             launched: SystemTime::now(),
             target: Mutex::default(),
+            gif_cancel: Mutex::default(),
         }
     }
 }
@@ -714,6 +747,9 @@ fn begin(
         }
     };
     recording.machine().set_audio(id, audio);
+    recording
+        .machine()
+        .set_point_width(id, geometry.source.width.round() as u32);
     if !take_over() {
         recording.machine().fail_start(id);
         return Err("The capture is no longer active.".into());
@@ -1193,6 +1229,226 @@ async fn save(
     Ok(ExportOutcome::Done)
 }
 
+/// What a GIF export would produce with `options`, or why it cannot be made (a recording longer
+/// than the limit, a bad frame rate or width). The review window asks before it offers the export
+/// and again whenever a choice changes; the math is `gif::plan`, in one place.
+#[tauri::command]
+pub fn recording_gif_plan(
+    id: u64,
+    options: gif::GifOptions,
+    state: State<RecordingState>,
+) -> Result<gif::GifPlan, String> {
+    let (size, duration) = state.machine().gif_source(id)?;
+    gif::plan(size, duration, options).map_err(|error| error.to_string())
+}
+
+/// Where an export is: sent to the review window by `recording-export-progress`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+enum ExportPhase {
+    Running,
+    Done,
+    Cancelled,
+    Failed,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExportProgress {
+    id: u64,
+    phase: ExportPhase,
+    /// 0..=1 by the recording's own clock.
+    fraction: f64,
+    message: Option<String>,
+}
+
+fn emit_export(
+    app: &AppHandle,
+    id: u64,
+    phase: ExportPhase,
+    fraction: f64,
+    message: Option<String>,
+) {
+    let _ = app.emit_to(
+        LABEL,
+        events::RECORDING_EXPORT_PROGRESS,
+        ExportProgress {
+            id,
+            phase,
+            fraction,
+            message,
+        },
+    );
+}
+
+/// What `recording_export_gif` answers with.
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GifExport {
+    pub outcome: ExportOutcome,
+    /// Size of the written file; 0 when the save dialog was dismissed.
+    pub bytes: u64,
+    /// Pictures in the GIF.
+    pub frames: u32,
+}
+
+/// Exports the finished recording `id` as a GIF: validates the options against the limits, asks
+/// where to save, then decodes the temporary MP4 and encodes into a hidden sibling file that is
+/// renamed over the target, so a cancelled or failed export leaves no partial file and never
+/// touches an existing one (ADR-019). The MP4 stays; the recording is not discarded. Progress goes
+/// out as `recording-export-progress`; `recording_cancel_gif_export` stops it.
+#[tauri::command]
+pub async fn recording_export_gif(
+    app: AppHandle,
+    window: WebviewWindow,
+    id: u64,
+    file_name: String,
+    options: gif::GifOptions,
+    state: State<'_, RecordingState>,
+) -> Result<GifExport, String> {
+    if !platform::SUPPORTED {
+        return Err(RecordingError::Unsupported.to_string());
+    }
+    if !export::valid_file_name_with(&file_name, ".gif") {
+        return Err(format!("invalid file name {file_name:?}"));
+    }
+    // Refuse before any dialog: a recording that is too long or a bad choice.
+    let (size, duration) = state.machine().gif_source(id)?;
+    let plan = gif::plan(size, duration, options).map_err(|error| error.to_string())?;
+    // The file must stay while the dialog and the export run: the same guard as a save.
+    let source = state.machine().begin_save(id)?;
+    let result = export_gif(&app, &window, id, &source, file_name, size, plan, &state).await;
+    state.machine().end_save();
+    *lock(&state.gif_cancel) = None;
+    match &result {
+        Ok(GifExport {
+            outcome: ExportOutcome::Done,
+            ..
+        }) => emit_export(&app, id, ExportPhase::Done, 1.0, None),
+        Ok(_) => emit_export(&app, id, ExportPhase::Cancelled, 0.0, None),
+        Err(message) => emit_export(&app, id, ExportPhase::Failed, 0.0, Some(message.clone())),
+    }
+    result
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn export_gif(
+    app: &AppHandle,
+    window: &WebviewWindow,
+    id: u64,
+    source: &Path,
+    file_name: String,
+    size: (u32, u32),
+    plan: gif::GifPlan,
+    state: &RecordingState,
+) -> Result<GifExport, String> {
+    let dialog = rfd::FileDialog::new()
+        .set_title("Export GIF")
+        .set_file_name(file_name)
+        .add_filter("GIF image", &["gif"])
+        .set_parent(window);
+    let Some(path) = tauri::async_runtime::spawn_blocking(move || dialog.save_file())
+        .await
+        .map_err(|e| format!("save dialog failed: {e}"))?
+    else {
+        return Ok(GifExport {
+            outcome: ExportOutcome::Cancelled,
+            bytes: 0,
+            frames: 0,
+        });
+    };
+    let cancel = Arc::new(AtomicBool::new(false));
+    *lock(&state.gif_cancel) = Some((id, cancel.clone()));
+    emit_export(app, id, ExportPhase::Running, 0.0, None);
+
+    let (source, target, handle) = (source.to_path_buf(), path.clone(), app.clone());
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
+        write_gif(&handle, id, &source, &target, size, plan, &cancel)
+    })
+    .await
+    .map_err(|e| format!("GIF export failed: {e}"))?;
+    match outcome {
+        Ok(frames) => {
+            let bytes = std::fs::metadata(&path).map_or(0, |metadata| metadata.len());
+            eprintln!(
+                "[recording] exported {frames} GIF frames, {bytes} B to {}",
+                path.display()
+            );
+            Ok(GifExport {
+                outcome: ExportOutcome::Done,
+                bytes,
+                frames,
+            })
+        }
+        Err(gif::ExportFailure::Cancelled) => Ok(GifExport {
+            outcome: ExportOutcome::Cancelled,
+            bytes: 0,
+            frames: 0,
+        }),
+        Err(gif::ExportFailure::Failed(reason)) => {
+            Err(format!("Could not export {}: {reason}", path.display()))
+        }
+    }
+}
+
+/// Decodes `source` and writes the GIF to `target` through a hidden sibling renamed over it.
+/// Returns the number of GIF frames. Runs on a worker thread; reports at most about ten times a
+/// second.
+fn write_gif(
+    app: &AppHandle,
+    id: u64,
+    source: &Path,
+    target: &Path,
+    size: (u32, u32),
+    plan: gif::GifPlan,
+    cancel: &AtomicBool,
+) -> Result<u32, gif::ExportFailure> {
+    let mut failure = None;
+    let mut frames = 0;
+    let mut last_report: Option<Instant> = None;
+    let written = export::replace_with(target, |file| {
+        let writer = std::io::BufWriter::new(file);
+        let result = gif::export(
+            writer,
+            size,
+            plan,
+            |next| platform::read_pictures(source, cancel, next),
+            |fraction| {
+                if last_report.is_none_or(|at| at.elapsed() >= Duration::from_millis(100)) {
+                    last_report = Some(Instant::now());
+                    emit_export(app, id, ExportPhase::Running, fraction, None);
+                }
+            },
+        );
+        match result {
+            Ok((mut writer, count)) => {
+                frames = count;
+                writer.flush()
+            }
+            Err(error) => {
+                failure = Some(error);
+                Err(std::io::Error::other("the GIF export did not finish"))
+            }
+        }
+    });
+    match (failure, written) {
+        (Some(failure), _) => Err(failure),
+        (None, Err(error)) => Err(gif::ExportFailure::Failed(error.to_string())),
+        (None, Ok(())) => Ok(frames),
+    }
+}
+
+/// Cancels the GIF export of recording `id`, if one is running. The partial file is removed by the
+/// export itself as it stops.
+#[tauri::command]
+pub fn recording_cancel_gif_export(id: u64, state: State<RecordingState>) {
+    if let Some((running, cancel)) = lock(&state.gif_cancel).as_ref()
+        && *running == id
+    {
+        cancel.store(true, Ordering::SeqCst);
+    }
+}
+
 /// Removes the leftovers of earlier launches. Call once at startup, off the main thread.
 pub fn cleanup_stale(app: &AppHandle) {
     let launched = app.state::<RecordingState>().launched;
@@ -1659,6 +1915,47 @@ mod tests {
             .begin_start(Duration::from_secs(300), (1, 1))
             .unwrap();
         assert!(!machine.status(now, 0).system_audio, "{next}");
+    }
+
+    #[test]
+    fn a_gif_is_planned_only_from_a_finished_recording_of_its_own_size() {
+        let mut machine = Machine::default();
+        let id = running(&mut machine, Instant::now());
+        assert!(machine.gif_source(id).is_err(), "still recording");
+        machine.begin_stop(id);
+        machine.finish(id, finished());
+        // The size is the video's in pixels, the length the finished recording's.
+        assert_eq!(
+            machine.gif_source(id),
+            Ok(((640, 480), Duration::from_secs(5)))
+        );
+        assert!(machine.gif_source(id + 1).is_err(), "another recording");
+        machine.discard(id).unwrap();
+        assert!(machine.gif_source(id).is_err(), "discarded");
+    }
+
+    #[test]
+    fn the_status_offers_a_gif_width_at_one_x_and_capped() {
+        let mut machine = Machine::default();
+        let now = Instant::now();
+        // A 600-point region recorded on a Retina display is 1200 px wide.
+        let id = machine.begin_start(CAP, (1200, 800)).unwrap();
+        machine.set_point_width(id, 600);
+        machine.set_point_width(id + 1, 50); // another recording: ignored
+        let status = machine.status(now, 0);
+        assert_eq!((status.gif_max_width, status.gif_default_width), (800, 600));
+        assert_eq!(status.gif_default_fps, 10);
+        // A wide region is capped at 800 px.
+        machine.fail_start(id);
+        let id = machine.begin_start(CAP, (3840, 2160)).unwrap();
+        machine.set_point_width(id, 1920);
+        assert_eq!(machine.status(now, 0).gif_default_width, 800);
+        // A small 1× region keeps its own width.
+        machine.fail_start(id);
+        let id = machine.begin_start(CAP, (320, 240)).unwrap();
+        machine.set_point_width(id, 320);
+        let status = machine.status(now, 0);
+        assert_eq!((status.gif_max_width, status.gif_default_width), (320, 320));
     }
 
     #[test]
