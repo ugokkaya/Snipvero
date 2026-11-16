@@ -31,6 +31,8 @@ index.html, src/              React frontend (every window loads index.html)
   overlay/TextEditor.tsx      textarea for the text being edited
   overlay/Toolbar.tsx         floating toolbar (tools, colours, sizes, undo/redo/delete, copy/save, record);
                               only a Record button when the overlay was opened to choose a region to record
+  recording/RecordingAudio.tsx   the two sound switches of the main window, microphone guidance
+  recording/audio.ts          pure microphone view state and sound label
   recording/RecordingReview.tsx  review window: video preview, Save…, Copy File/Path, Export as GIF… (disabled), Discard
   recording/format.ts         pure clock, byte size and `*.mp4` file name formatting
   overlay/selection.ts        pure selection model: state machine, hit testing, cursors, resizeRect
@@ -76,6 +78,10 @@ src-tauri/
   src/recording/mod.rs        recording state machine, cap/monitor, commands, review window, preview protocol,
                               startup/exit cleanup (ADR-037)
   src/recording/macos.rs      SCStream + AVAssetWriter (H.264 MP4), free space, clipboard
+  src/recording/macos/audio.rs  optional audio: SCK system audio and AVCaptureSession microphone decoded to
+                              stereo f32, AAC writer input, permission lookup/request (ADR-037)
+  src/recording/mixer.rs      pure mixing: timeline alignment on the host clock, gap filling, limiter, format
+                              conversion, resampling (tested on every OS)
   src/recording/windows.rs    unsupported stub (compiles only)
   src/recording/tempfiles.rs  private 0700 per-launch folder, stale cleanup, free-space maths (pure)
   src/export/mod.rs           crop + blend + PNG, request validation, overlay_copy / overlay_save, save dialog
@@ -297,6 +303,12 @@ One pipeline: a region of one display becomes a temporary MP4 (ADR-037).
    stops the stream, ends the writer session at the host clock time (so a static screen still gives the right
    length), finishes the file, and moves to `finished`, releases the capture lock and opens the review window.
    A recording without any frame is discarded with a message.
+   **Audio (optional, ADR-037):** the stored switches are read in `recording_start` (before the overlay closes, so a
+   refused microphone leaves the selection up). System audio is requested on the same `SCStream`; the microphone runs
+   in an `AVCaptureSession`. Both feed `mixer::Mixer`; a pacer thread hands the mix up to 250 ms before now on the
+   host clock to one AAC `AVAssetWriterInput`, silence where a source has nothing, so the track is as long as the
+   video. With sound on, the last picture is held until the end (a still screen). With both switches off none of
+   this is created. `recording_audio` / `recording_set_audio` serve the main window; only the latter may prompt.
 5. The review window plays the file through the `snipvero-recording` protocol (`recording::serve`, range requests,
    only the finished recording with the given id) and offers Save (native dialog from Rust, hidden sibling file
    renamed over the target, then the temporary file is deleted), Copy File / Copy Path, Discard. The page knows an id, never a path.

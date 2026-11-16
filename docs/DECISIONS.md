@@ -331,7 +331,8 @@ Lightweight ADRs. Newest last. Do not rewrite accepted entries: supersede them w
 ## ADR-020: macOS beta packaging, version scheme and icons
 
 - **Status:** accepted (2026-10-31). Verified on macOS only. The `CFBundleShortVersionString`
-  part of **Version** is superseded by ADR-022.
+  part of **Version** is superseded by ADR-022. The "no entitlements" rule is replaced by the one
+  `com.apple.security.device.audio-input` entitlement of ADR-037.
 - **Scope (user decision):** macOS is the only platform of the beta; Windows stays in CI (NSIS
   smoke bundle) and is presented as planned. Public text describes Snipvero on its own terms,
   without comparisons with other tools.
@@ -877,8 +878,9 @@ Homebrew installation, Windows runtime support or runtime QA of the notarized di
 ## ADR-037: Screen recording: one pipeline, MP4 first, GIF as an export
 
 - **Status:** proposed (2026-11-16); **task 2 (silent MP4 recording on macOS) implemented and partly verified
-  on macOS only** (see "Task 2 outcome" below for what was measured and what was not). Tasks 3 (audio) and 4 (GIF) are
-  not started; everything about them is still a design and unverified. The API facts below come from the `objc2-*`
+  on macOS only** (see "Task 2 outcome" below for what was measured and what was not). **Task 3 (optional audio) implemented
+  on macOS; system audio and the entitlement behaviour measured, the microphone path built but not run against a granted
+  microphone** (see "Task 3 outcome"). Task 4 (GIF) is not started; everything about it is still a design and unverified. The API facts below come from the `objc2-*`
   0.3.2 bindings in the local registry and Apple's documentation. macOS is the target; Windows must keep compiling
   (unsupported stubs, type-checked against the shared code but not built on Windows).
 - **Context:** the user asked for screen recording. Decisions already taken with the user:
@@ -1131,6 +1133,57 @@ row, the review window and the `snipvero-recording` preview protocol. Deviations
     playback, Save/Copy, the shortcut stop, a Retina vs 1× region, memory over many cycles, the signed `.app` smoke test with real clicks and Windows are
     **not run**; the Turkish QA checklist in the local `docs/PROGRESS.md` covers them.
 
+### Task 3 outcome (optional audio, macOS)
+
+**Measured, macOS 27.2 (build 26B123), Apple silicon, built-in microphone, run from a terminal and from ad-hoc hardened probe apps:**
+
+- **SCK system audio** (`capturesAudio`, 48 kHz, 2 channels requested): every buffer is 48 000 Hz, 2 channels, 32-bit **float, non-interleaved**
+  (`flags 0x29`, two planes of 3 840 bytes), **960 frames (20 ms)**; buffers keep coming while nothing plays (all-zero), so a quiet system is not
+  "no buffers". A sound played with `afplay` shows as a peak of 0.36. Timestamps are on the host clock: the first audio buffer began 12–17 ms after the first
+  picture; **delivery latency** (arrival minus end of buffer) was 0.6–102 ms (mean ≈ 30 ms), hence the mixer's 250 ms latency.
+- **Microphone format** (`AVCaptureDevice.activeFormat`, built-in): 48 000 Hz, **1 channel, 32-bit float, interleaved** (`flags 0x9`). Not read from
+  delivered `AVCaptureAudioDataOutput` buffers: see "not measured". The code therefore reads each buffer's own format (float32/int16, planar or
+  interleaved, any channel count, any rate) instead of assuming this one, and resamples linearly if a device cannot give 48 kHz.
+- **Hardened runtime without the entitlement:** a probe `.app` (ad-hoc, `-o runtime`, with `NSMicrophoneUsageDescription`, **no** entitlement) calling
+  `AVCaptureDevice.requestAccess(for: .audio)` was **answered `false` after 0.00 s and the status became `denied`: no prompt**. The same probe signed with
+  `com.apple.security.device.audio-input` **waited for the user** (no answer for 8 s, status stayed `notDetermined`, i.e. the prompt appeared). The
+  entitlement is therefore required, as designed. (The probe grants are of throwaway identifiers.)
+- **Decision: mono or stereo?** The output is **stereo** AAC, 48 kHz, 128 kbit/s: system audio is stereo, the (mono) microphone is copied to both channels.
+  Measured result of a real recording (SCK system audio, 5 s, ad-hoc test): `soun` track `aac `, 48 kHz, 2 ch, starts at 0.000, 5.0879 s long, decoded
+  with the same peak (0.36) as the capture; `vide` track 5.0883 s; QuickTime-compatible container (`isPlayable`).
+- **One mixed track vs. two:** kept the mixer (players play the first audio track). Two tracks were not tried in QuickTime; the decision still rests on the
+  player behaviour documented above, not on a new measurement.
+
+**Implementation.** `recording/mixer.rs` (pure, 23 tests: alignment on the host clock, gap filling, overlap dropping, jitter and drift tolerance of 100 ms,
+limiter that is the identity up to 0.9, planar/interleaved/int16/mono conversion, resampler, a clock-correction for a source not stamped on the host clock);
+`recording/macos/audio.rs` (PCM sample buffers into one AAC `AVAssetWriterInput`, `AVCaptureSession` microphone, permission lookup and request);
+`recording_audio` / `recording_set_audio` (the ADR planned this in `recording_status`; a separate query keeps the per-state event free of permission calls),
+`settings.json` keys `recordSystemAudio` / `recordMicrophone` (absent = off), the two switches in the main window, and `recording_start` gaining
+`withoutMicrophone`. The IPC table above is otherwise unchanged; `recording_start` still takes the audio choice from the stored settings rather than from the page.
+Deviations and decisions taken while building it:
+
+- **A pacer instead of a pull model.** A thread hands the mix to the writer every 100 ms, up to 250 ms before now on the host clock. A source that stalls,
+  starts late or never delivers is silence and holds nothing back; late data is dropped. At stop the rest is flushed up to the end of the video.
+- **Still screens (Task 2 interaction, measured).** With only a video input the writer stretched the last picture to `endSessionAtSourceTime` (a 4 s recording of
+  a still lock screen: video track 3.995 s). **With an audio input present it did not**: video track 0.067 s, sound 5.12 s. With sound on, the newest picture
+  is therefore appended once more, stamped one frame before the end (`hold_last_picture`); re-measured: video 5.088 s, sound 5.088 s. Silent recordings are unchanged.
+- **No permission look-up while both are off.** `recording_start` does not even read the microphone status then (`plan_audio`); the main window's `recording_audio`
+  reads the status only when the audio panel is shown (supported platforms), and it never prompts.
+- **Microphone not allowed at start:** `recording_start` is refused with the code `microphoneUnavailable` before the overlay closes; the overlay offers
+  **Record without microphone** (an explicit choice that is not stored). A source that fails mid-recording, or a microphone that delivered nothing, is named in the
+  review window's notice. The review video is no longer `muted`, and a "Sound" row says what the file has.
+- **Dependencies:** no new crate. `objc2-core-audio-types` is named directly (already in the tree), and more feature flags of `objc2-av-foundation` /
+  `objc2-core-media` are enabled. The AAC keys are string literals (`AVFormatIDKey`, …): AVFAudio has no bindings in the tree and the constants are plain strings.
+- **Packaging:** `src-tauri/Entitlements.plist` with the one entitlement, `bundle.macOS.entitlements`, `NSMicrophoneUsageDescription` in `src-tauri/Info.plist`;
+  `pnpm verify:macos` requires the usage text and exactly that entitlement (verified on a built local-identity `.app` and DMG: all checks pass); RELEASE.md and
+  AGENTS.md updated. This ends ADR-020's "no entitlements" statement for the one entitlement above (nothing else changes: no sandbox, no JIT).
+- **Not measured / not verified (macOS only anyway):** (1) **delivered microphone buffers**, their format and their **timestamp offset to system audio**: the
+  machine's screen was locked and the Microphone permission of the test terminal was undecided, so no prompt could be answered. The code logs, per source and
+  recording, `first buffer … arrived N ms after it ended, stamped on / shifted by K frames onto the host clock` so the first real run measures it; a microphone
+  not on the host clock is shifted by a constant (`clock_correction`, tested). (2) A recording with the microphone, grant/deny/reset flows and a revoked
+  permission mid-recording. (3) Long-run A/V drift over 5–10 minutes (the design tolerates ≈ 30 ms in ten minutes). (4) macOS 14 and 15 (only macOS 27 ran).
+  (5) QuickTime playback by a person (AVFoundation reports a playable file). (6) The signed `.app` with real clicks, notarized builds, Windows (stubs only).
+
 ### Plan for tasks 2–4 (follow in order; each ends with `pnpm check` and the cargo trio)
 
 **Task 2: video (MP4, no audio)**
@@ -1172,5 +1225,5 @@ row, the review window and the `snipvero-recording` preview protocol. Deviations
 3. `recording_export_gif` + `recording-export-progress`, save dialog (`*.gif` only, plain suggested name as `rfd` today), UI: fps/width choice, size estimate, progress, cancel, error.
 4. QA and docs: file plays in browsers/Preview, memory stays bounded for a 5-minute source (frames streamed, never all held), temp file untouched, README/ARCHITECTURE/REQUIREMENTS updates and the status line of this ADR.
 
-- **Verification so far:** task 2 as listed under "Task 2 outcome". For tasks 3 and 4, nothing beyond reading the code and bindings: anything above
-  marked as an expectation (entitlement behaviour, notarization acceptance, mixing vs. two tracks, macOS 15 behaviour) is unverified.
+- **Verification so far:** task 2 as listed under "Task 2 outcome", task 3 as listed under "Task 3 outcome". For task 4, nothing beyond reading the code and
+  bindings. Still unverified: notarization acceptance of the entitlement, two tracks vs. the mixer in QuickTime, macOS 14/15 behaviour, the live microphone.

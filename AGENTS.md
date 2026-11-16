@@ -43,7 +43,14 @@ open -n --stderr /tmp/snipvero.log src-tauri/target/release/bundle/macos/Snipver
 # capture/export cycles; copies onto a private pasteboard, never the user's clipboard (ADR-019)
 open -n --stderr /tmp/snipvero.log src-tauri/target/release/bundle/macos/Snipvero.app --args --stress-export=20
 tccutil reset ScreenCapture com.snipvero.app                                    # reset the grant
+tccutil reset Microphone com.snipvero.app                                       # reset the microphone grant
+# --stress-record=N --stress-record-audio=system,microphone records with sound (the microphone needs its grant)
 ```
+
+Recording with the microphone needs the `com.apple.security.device.audio-input` entitlement
+(`src-tauri/Entitlements.plist`, applied by the bundler) and the usage text in `src-tauri/Info.plist`;
+the hardened runtime denies the microphone silently without them (ADR-037). Its grant, like Screen
+Recording, belongs to the signing identity.
 
 ## Engineering rules
 

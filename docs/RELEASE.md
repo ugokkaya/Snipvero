@@ -252,20 +252,28 @@ What the signature must have, and what `pnpm verify:macos --distribution` checks
   Tauri passes for a real identity) and a team identifier.
 - **Hardened runtime**, required by notarization. Tauri enables it by default
   (`bundle.macOS.hardenedRuntime`); the ad-hoc build already carries the `runtime` flag.
-- **No entitlements.** Snipvero is not sandboxed, the web content runs in WebKit's own processes
-  (no JIT entitlement), and Screen Recording is a privacy permission, not an entitlement.
-  Notarization also rejects `com.apple.security.get-task-allow`, which Tauri does not add. Add an
-  entitlements file only if notarization or a signed launch shows a need.
-- **Screen Recording after a signature change:** macOS ties the grant to the signing identity.
-  Testers moving from an ad-hoc beta to a Developer ID build must grant permission again once;
-  later Developer ID builds keep it.
+- **Exactly one entitlement: `com.apple.security.device.audio-input`** (`src-tauri/Entitlements.plist`,
+  applied by `bundle.macOS.entitlements`). It is what lets the optional microphone of a screen
+  recording work under the hardened runtime: measured with a hardened-runtime probe app (ADR-037), the
+  system denies a microphone request at once, without a prompt, when the entitlement is missing, and
+  asks the user when it is present. The entitlement is not on Apple's restricted list and needs no
+  provisioning profile. Everything else stays out: Snipvero is not sandboxed, the web content runs
+  in WebKit's own processes (no JIT entitlement), Screen Recording and system audio are privacy
+  permissions rather than entitlements, and there is no camera. Notarization also rejects
+  `com.apple.security.get-task-allow`, which Tauri does not add. The entitlement and
+  `NSMicrophoneUsageDescription` in `src-tauri/Info.plist` ship in every build; the prompt itself
+  appears only when a user turns on the microphone option (off by default).
+- **Screen Recording and Microphone after a signature change:** macOS ties both grants to the
+  signing identity. Testers moving from an ad-hoc beta to a Developer ID build must grant Screen
+  Recording again once (and the microphone, if they use it); later Developer ID builds keep them.
+  Reset the microphone grant for testing with `tccutil reset Microphone com.snipvero.app`.
 
 Local signing and public distribution differ:
 
 | Build                                       | Signature                                  | Gatekeeper on a downloaded copy | Use                                                               |
 | ------------------------------------------- | ------------------------------------------ | ------------------------------- | ----------------------------------------------------------------- |
 | Default (`pnpm tauri build`, CI)            | ad hoc (`signingIdentity: "-"`)            | rejected                        | CI smoke bundle, local builds, unnotarized pre-releases (ADR-025) |
-| `Snipvero Local Development` (ADR-011)      | self-signed, this Mac only                 | rejected                        | keeping the Screen Recording grant                                |
+| `Snipvero Local Development` (ADR-011)      | self-signed, this Mac only                 | rejected                        | keeping the Screen Recording and Microphone grants                |
 | Developer ID + notarized + stapled (§6, §7) | Developer ID Application, secure timestamp | accepted                        | the build to publish once available                               |
 
 Only `pnpm verify:macos --distribution` passing makes a build Apple-verified. The original ad-hoc
@@ -488,13 +496,15 @@ It checks:
 
 - `Info.plist`: identifier, name, package type, `CFBundleShortVersionString` (package version
   without suffix) and `CFBundleVersion` (`bundleVersion`) in Apple's format, minimum macOS 14.0,
-  `LSUIElement`, copyright.
+  `LSUIElement`, copyright, and `NSMicrophoneUsageDescription` (the text of `src-tauri/Info.plist`;
+  without it macOS ends the app on the first microphone access).
 - The exact file list of the bundle (executable, `Info.plist`, icon, `LICENSE.txt`,
   `THIRD_PARTY_NOTICES.txt`, code signature, and optional `Contents/CodeResources` Apple ticket,
   allowed only when `stapler validate` succeeds); the bundled notices and license equal the
   repository's files.
 - Architectures (`--arch`, default `arm64`), `minos` of every slice, system libraries only.
-- `codesign --verify --deep --strict`, signature identifier, hardened runtime, no entitlements;
+- `codesign --verify --deep --strict`, signature identifier, hardened runtime, **exactly one
+  entitlement (`com.apple.security.device.audio-input`)** and no `get-task-allow`;
   the Gatekeeper result is reported (and required with `--distribution`).
 - The DMG: named `Snipvero_<package version>_<arch>.dmg`, `hdiutil verify` passes, it mounts
   read-only and holds only `Snipvero.app` and an `Applications` link to `/Applications`; the app
@@ -510,7 +520,10 @@ It checks:
 - It prints the DMG's SHA-256 for the release notes.
 
 Then on a Mac that has never run Snipvero: download the DMG through a browser (so it is
-quarantined), install it, launch it, grant Screen Recording, take a capture, copy and save.
+quarantined), install it, launch it, grant Screen Recording, take a capture, copy and save. If the
+release has audio: record a short clip with system audio and with the microphone (the prompt must
+appear on first use of the microphone, not before), play the file in QuickTime, and check
+`codesign -d --entitlements - Snipvero.app` shows only the audio-input entitlement.
 
 ### Local candidate provenance and preservation
 
@@ -614,7 +627,8 @@ checks passed. `brew audit --cask --online` stopped at Homebrew's CLT compatibil
 deletion/update or diagnostic bypass was performed. Install, upgrade and uninstall were not run
 against the maintainer's existing manual app; use the clean-Mac procedure below.
 
-Test on a clean Apple silicon Mac: install, launch, Screen Recording, capture/copy/save, upgrade,
+Test on a clean Apple silicon Mac: install, launch, Screen Recording, capture/copy/save, a recording
+with system audio and microphone (prompt on first microphone use), upgrade,
 and uninstall. Do not use `--no-quarantine` or bypass audit failures. Do not overwrite an existing
 manual installation without backing it up. These online/install/upgrade tests cannot pass until
 the new release URL and tap exist; they have not been claimed as completed.

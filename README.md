@@ -26,7 +26,7 @@ check for updates.
 - **Annotations:** arrows, outlined rectangles and text in six colours and three sizes. Select,
   move, resize, re-edit and delete them, with full undo and redo. Text supports any language your
   keyboard can type.
-- **Screen recording (macOS):** record any region of one display as a silent MP4 video (H.264, 30 fps).
+- **Screen recording (macOS):** record any region of one display as an MP4 video (H.264, 30 fps), with optional system audio and microphone.
   See [Screen recording](#screen-recording).
 - **Sharp on Retina:** the image keeps the display's full pixel resolution, including setups that
   mix Retina and standard displays.
@@ -192,7 +192,15 @@ a red dot with the elapsed time.
 
 - **Stop** with **Stop Recording** in the menu bar or by pressing your capture shortcut again. A
   recording also stops by itself after five minutes (the maximum length); you are told so.
-- The video has no sound and shows the mouse pointer. It is 30 frames per second at the region's full pixel
+- **Sound is off by default.** Under **Record Region** in the Snipvero window, **System audio** (what the
+  computer plays) and **Microphone** are two separate switches, remembered between launches. System audio
+  needs no permission beyond Screen Recording. The first time you turn on the microphone, macOS asks for
+  permission; if you decline, the switch stays off and the window explains how to allow it in **System
+  Settings → Privacy & Security → Microphone**. If the permission is turned off later, recording says so and
+  offers to record without the microphone; it never drops the microphone silently. With both switches off,
+  Snipvero never touches the microphone. Both sources are mixed into one stereo AAC track, and the
+  recording window says which sound the video has.
+- The video shows the mouse pointer. It is 30 frames per second at the region's full pixel
   size (rounded down to even numbers), so the region must be at least 16 × 16 pixels and no larger than
   8192 pixels per side and about 9.4 megapixels (for example 3840 × 2160). Larger regions are refused with a message.
 - When it ends, a window plays the recording back. **Save…** writes an MP4 where you choose, **Copy File** and
@@ -205,7 +213,8 @@ a red dot with the elapsed time.
 ## Screen Recording permission
 
 macOS asks for permission before any app can read the screen. Snipvero needs it to take a
-screenshot or to record a region; it does not record audio.
+screenshot or to record a region. Recording sound is optional: system audio uses the same permission, and
+the microphone has its own (see [Screen recording](#screen-recording)).
 
 1. Press the capture shortcut or choose **Capture** in the menu bar. macOS shows a permission prompt.
 2. Open **System Settings → Privacy & Security → Screen & System Audio Recording** (the Snipvero
@@ -285,7 +294,7 @@ If another app already uses the shortcut, the Snipvero window says so; choose an
   (`com.snipvero.app` in the per-user temporary folder). It is deleted when you save it, discard it,
   quit Snipvero, and at the next launch if Snipvero was force-quit. It is never uploaded.
 - A capture shortcut you choose is stored in `~/Library/Application Support/com.snipvero.app/settings.json`.
-  The file holds only the shortcut and, if you set it, the recording length.
+  The file holds only the shortcut and, if you set them, the recording length and the two sound switches.
 - Copying puts the image on the system clipboard, where other apps can read it, as with any copy.
 
 ## Known limitations
