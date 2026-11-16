@@ -30,6 +30,12 @@ semver = "1"
 serde_json = "1"
 # PNG export; already in Tauri's dependency tree (ADR-007, ADR-018).
 png = "0.18"
+# GIF export of a finished recording (ADR-037, task 4): the encoder with NeuQuant quantization.
+# `MIT OR Apache-2.0`, pure Rust, no network code. Adds `gif` and `color_quant` (MIT) to
+# `Cargo.lock`; `weezl` (LZW, `MIT OR Apache-2.0`) was in it already through `tiff` but is first
+# compiled on macOS now. Default features trimmed to the two it needs (no `raii_no_panic`). The
+# alternative is writing an LZW encoder and a quantizer by hand.
+gif = { version = "0.14", default-features = false, features = ["std", "color_quant"] }
 # Native save dialog (NSSavePanel / IFileSaveDialog). No Linux backend is needed (ADR-018).
 rfd = { version = "0.17", default-features = false }
 
@@ -61,8 +67,11 @@ objc2-screen-capture-kit = { version = "0.3", default-features = false, features
 # hand-written extern "C"/msg_send! for dozens of selectors, which is less safe and more code.
 # Same maintainers, generator and `Zlib OR Apache-2.0 OR MIT` licence as the crates above; default
 # features off, and only the feature names the code uses.
-objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "dispatch2", "objc2-core-media", "objc2-core-audio-types", "AVAssetWriter", "AVAssetWriterInput", "AVCaptureAudioDataOutput", "AVCaptureDevice", "AVCaptureInput", "AVCaptureOutput", "AVCaptureOutputBase", "AVCaptureSession", "AVMediaFormat", "AVVideoSettings"] }
-objc2-core-media = { version = "0.3", default-features = false, features = ["std", "CMBlockBuffer", "CMFormatDescription", "CMSampleBuffer", "CMSync", "CMTime", "objc2-core-audio-types"] }
+objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "dispatch2", "objc2-core-media", "objc2-core-audio-types", "AVAsset", "AVAssetReader", "AVAssetReaderOutput", "AVAssetTrack", "AVAssetWriter", "AVAssetWriterInput", "AVCaptureAudioDataOutput", "AVCaptureDevice", "AVCaptureInput", "AVCaptureOutput", "AVCaptureOutputBase", "AVCaptureSession", "AVMediaFormat", "AVVideoSettings"] }
+objc2-core-media = { version = "0.3", default-features = false, features = ["std", "objc2-core-video", "CMBlockBuffer", "CMFormatDescription", "CMSampleBuffer", "CMSync", "CMTime", "objc2-core-audio-types"] }
+# GIF export (ADR-037, task 4): AVAssetReader hands back BGRA pictures as CVPixelBuffers, whose rows are
+# read through these bindings. Already in the tree through the two crates above; named directly for its types.
+objc2-core-video = { version = "0.3", default-features = false, features = ["std", "CVBase", "CVBuffer", "CVImageBuffer", "CVPixelBuffer", "CVReturn"] }
 # Audio for screen recordings (ADR-037): the sample formats of both audio sources and the PCM we hand
 # to the encoder. Already in the tree through the two crates above; named directly for its types.
 objc2-core-audio-types = { version = "0.3", default-features = false, features = ["std", "CoreAudioBaseTypes"] }
