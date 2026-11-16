@@ -11,6 +11,10 @@ const ipc = vi.hoisted(() => ({
   recordingCopy: vi.fn(),
   recordingDiscard: vi.fn(),
   recordingSource: vi.fn((id: number) => `snipvero-recording://localhost/${id}`),
+  recordingGifPlan: vi.fn(),
+  recordingExportGif: vi.fn(),
+  recordingCancelGifExport: vi.fn(),
+  onRecordingExportProgress: vi.fn(),
 }));
 vi.mock("../ipc", () => ipc);
 
@@ -29,6 +33,9 @@ const finished = (overrides: Partial<RecordingStatus> = {}): RecordingStatus => 
   notice: null,
   systemAudio: false,
   microphone: false,
+  gifMaxWidth: 640,
+  gifDefaultWidth: 640,
+  gifDefaultFps: 10,
   ...overrides,
 });
 
@@ -67,6 +74,14 @@ beforeEach(() => {
   ipc.recordingSave.mockResolvedValue("done");
   ipc.recordingCopy.mockResolvedValue(undefined);
   ipc.recordingDiscard.mockResolvedValue(undefined);
+  ipc.onRecordingExportProgress.mockResolvedValue(() => {});
+  ipc.recordingGifPlan.mockResolvedValue({
+    width: 640,
+    height: 480,
+    fps: 10,
+    ticks: 120,
+    estimatedBytes: 4_000_000,
+  });
 });
 
 afterEach(() => {
@@ -121,8 +136,11 @@ describe("recording review", () => {
     expect(button("Save").disabled).toBe(false);
   });
 
-  it("keeps the GIF export disabled until it exists", async () => {
+  it("opens the GIF export panel from the button", async () => {
     await render(finished());
+    expect(container.querySelector(".review-gif")).toBeNull();
+    await click(button("Export as GIF"));
+    expect(container.querySelector(".review-gif")).not.toBeNull();
     expect(button("Export as GIF").disabled).toBe(true);
   });
 

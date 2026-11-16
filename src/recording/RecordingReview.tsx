@@ -9,6 +9,7 @@ import {
   type RecordingStatus,
 } from "../ipc";
 import { soundLabel } from "./audio";
+import { GifExport } from "./GifExport";
 import { formatBytes, formatClock, recordingFileName } from "./format";
 
 const errorMessage = (error: unknown) =>
@@ -53,6 +54,9 @@ function Review({ id, status }: { id: number; status: RecordingStatus }) {
   const [busy, setBusy] = useState<Action | null>(null);
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [previewFailed, setPreviewFailed] = useState(false);
+  // A GIF export reads the file: nothing else may delete or save it meanwhile.
+  const [exportingGif, setExportingGif] = useState(false);
+  const [gifOpen, setGifOpen] = useState(false);
 
   const run = useCallback(async (action: Action, work: () => Promise<unknown>, done?: string) => {
     setBusy(action);
@@ -67,7 +71,7 @@ function Review({ id, status }: { id: number; status: RecordingStatus }) {
     }
   }, []);
 
-  const disabled = busy !== null;
+  const disabled = busy !== null || exportingGif;
   return (
     <main className="review">
       <h1>Recording</h1>
@@ -140,8 +144,8 @@ function Review({ id, status }: { id: number; status: RecordingStatus }) {
         <button
           type="button"
           className="button"
-          disabled
-          title="Exporting a recording as a GIF is not available yet."
+          disabled={disabled || gifOpen}
+          onClick={() => setGifOpen(true)}
         >
           Export as GIF…
         </button>
@@ -154,6 +158,14 @@ function Review({ id, status }: { id: number; status: RecordingStatus }) {
           Discard
         </button>
       </div>
+      {gifOpen && (
+        <GifExport
+          id={id}
+          status={status}
+          onBusy={setExportingGif}
+          onClose={() => setGifOpen(false)}
+        />
+      )}
       <p className="review-hint">
         The recording is a temporary file. Copies of it, and of its path, only last until you save,
         discard it or quit Snipvero.

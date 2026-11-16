@@ -1003,6 +1003,42 @@ a {
   opacity: 0.5;
 }
 
+.review-gif {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text-secondary) 10%, transparent);
+}
+
+.review-gif h2 {
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.review-gif-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+.review-gif-row label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.review-gif-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.review-gif-progress progress {
+  flex: 1;
+}
+
 .review-discard {
   margin-left: auto;
   color: var(--error);
