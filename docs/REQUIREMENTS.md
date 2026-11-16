@@ -79,6 +79,7 @@ the countdown text. The indicator stays on the selected display and hides before
   **Review Last Recording…** after a recording is finished and not yet saved or discarded.
 - The output is rounded down to even pixel sizes, at least 16 px and within H.264 level 5.2 (at most 8192 px per
   side and 9.4 megapixels); other regions are refused with a message.
+- While recording, a strip beside the red border shows the clock, a **Stop** button and, when the capture shortcut is registered, "or press <shortcut>". It takes clicks but never focus, and is never in the video.
 - The cap (`recordingMaxSeconds` in `settings.json`, 10 to 600 s, default 300) is a monotonic deadline;
   reaching it stops the recording normally and the review window says so. A file of 1 GiB also ends it.
 - The recording is a temporary file in a private (0700) per-launch folder; it is deleted on Save, Discard,

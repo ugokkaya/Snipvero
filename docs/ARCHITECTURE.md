@@ -302,7 +302,7 @@ One pipeline: a region of one display becomes a temporary MP4 (ADR-037).
    (VideoToolbox hardware encoding inside AVFoundation). The state becomes `recording` only after the
    stream runs.
 3. A monitor thread enforces the cap and the 1 GiB file guard with a monotonic deadline and keeps the tray
-   title and the red indicator panel (the countdown panel of `overlay/macos/countdown.rs`) current. The tray row,
+   title and the red indicator (the countdown panel of `overlay/macos/countdown.rs`: a click-through border, plus a small clickable strip panel with the clock, a Stop button and the shortcut hint; the button stops from another thread so its panel is not torn down inside its own action) current. The tray row,
    the capture shortcut and the main window's button end here: `recording::trigger`.
 4. Stop (user, cap, size, or a stream/encoder failure reported by the delegate) calls `begin_stop` once; a worker
    stops the stream, ends the writer session at the host clock time (so a static screen still gives the right

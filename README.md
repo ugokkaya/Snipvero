@@ -187,10 +187,12 @@ notarization for distribution.
 Choose **Record Region** in the menu bar (or in the Snipvero window), drag to select the area and
 click **Record**. You can also click the record button at the end of the screenshot toolbar after
 selecting a region. The selection screen closes first, so it is never in the video, and Snipvero's own
-windows are never recorded. A red border and a clock mark the area while it records, and the menu bar shows
-a red dot with the elapsed time.
+windows are never recorded. A red border marks the area while it records, with a small red strip beside it:
+the elapsed time, a **Stop** button and a reminder of the shortcut that also stops (for example "or press ⇧⌘2").
+The strip never takes focus from the app you are recording and is not in the video. The menu bar shows a red dot
+with the elapsed time too.
 
-- **Stop** with **Stop Recording** in the menu bar or by pressing your capture shortcut again. A
+- **Stop** with the **Stop** button on the red strip, **Stop Recording** in the menu bar or by pressing your capture shortcut again. A
   recording also stops by itself after five minutes (the maximum length); you are told so.
 - **Sound is off by default.** Under **Record Region** in the Snipvero window, **System audio** (what the
   computer plays) and **Microphone** are two separate switches, remembered between launches. System audio

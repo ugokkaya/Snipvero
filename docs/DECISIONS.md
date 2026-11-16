@@ -1258,6 +1258,16 @@ not run in the app, only in its unit tests with a mocked `ipc`; a GIF opened in 
 track, and the held picture merges, but a recording with audio was not exported); macOS 14 and 15 (only 27 ran); memory over a long source (the 60 s limit prevents one; the 28 MB peak is the 60 s worst case);
 notarized builds; Windows (a stub, compiled by CI only).
 
+### Addendum: Stop button on the recording indicator
+
+The indicator gained a control strip beside the border: the clock, a **Stop** button and "or press <capture shortcut>" (`shortcut::display_accelerator`, from the registered shortcut; absent when it is
+not registered). It is a **second, small panel**, not part of the click-through one, so recorded apps still receive clicks through the border panel; it is nonactivating (`NonactivatingPanel`,
+`becomesKeyOnlyIfNeeded`, `orderFrontRegardless`), so the recorded app keeps its focus, and it is a Snipvero window, so the whole-app exclusion keeps it out of the video. Placement is
+`geometry::recording_layout` (above the region, else below, else inside its top edge, always on the display). The button calls `stop(id, User)` on a spawned thread: stopping removes the indicator, and
+tearing the button's panel and target down inside the button's own action would free the object that is running. Measured on macOS 27.2 with the `--stress-record` harness and screenshots: the strip
+renders above the region ("● 0:01 [Stop] or press F13") on a secondary display. **Not verified:** a real mouse click on the button (synthetic events from a terminal were not delivered, probably for lack of
+the Accessibility permission), keyboard operation, VoiceOver, mixed-DPI placement, and that the strip is absent from the recorded video (by the whole-app exclusion, not re-measured).
+
 ### Plan for tasks 2–4 (follow in order; each ends with `pnpm check` and the cargo trio)
 
 **Task 2: video (MP4, no audio)**

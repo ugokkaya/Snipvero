@@ -9,6 +9,7 @@
   the capture shortcut or the maximum length (five minutes by default). A review window plays the recording and offers
   Save, Copy File, Copy Path and Discard. The recording is a private temporary file, deleted when saved,
   discarded, on quit and at the next launch.
+- macOS: a **Stop** button and the stop shortcut next to the clock beside the recorded area.
 - macOS: optional system audio and microphone for recordings, two separate switches that are off by default.
 - macOS: **Export as GIF…** in the recording window. Choose 5, 10 or 15 fps (10 by default) and a width up to 800 pixels;
   the window shows the size and an estimate, then progress with Cancel. GIFs are made from at most 60 seconds of video.
