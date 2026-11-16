@@ -33,6 +33,7 @@ use crate::tray;
 
 #[cfg(target_os = "macos")]
 mod macos;
+mod mixer;
 mod tempfiles;
 #[cfg(target_os = "macos")]
 use macos as platform;
@@ -87,8 +88,105 @@ pub struct RecordingStatus {
     pub bytes: u64,
     /// Length of the finished video.
     pub duration_ms: Option<u64>,
-    /// Why a recording ended other than by the user, for the review window.
+    /// Why a recording ended other than by the user, and anything that went wrong with the
+    /// sound, for the review window.
     pub notice: Option<String>,
+    /// Which sound sources this recording has (ADR-037); both false is a silent video.
+    pub system_audio: bool,
+    pub microphone: bool,
+}
+
+/// Which audio sources a recording takes. Both are off by default and independent (ADR-037).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioChoice {
+    pub system: bool,
+    pub microphone: bool,
+}
+
+impl AudioChoice {
+    pub fn any(self) -> bool {
+        self.system || self.microphone
+    }
+}
+
+/// Where the microphone permission stands. `Unsupported`: this platform cannot record sound yet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MicrophoneAccess {
+    NotDetermined,
+    Authorized,
+    Denied,
+    Restricted,
+    Unsupported,
+}
+
+/// What the main window shows about sound: the stored choices and the microphone permission.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioStatus {
+    pub supported: bool,
+    pub system: bool,
+    /// The stored choice. The microphone is only recorded while `microphone_access` is
+    /// `authorized`; the page shows the toggle on only then.
+    pub microphone: bool,
+    pub microphone_access: MicrophoneAccess,
+}
+
+fn stored_audio(stored: &settings::Settings) -> AudioChoice {
+    AudioChoice {
+        system: stored.record_system_audio,
+        microphone: stored.record_microphone,
+    }
+}
+
+fn audio_status(stored: &settings::Settings, access: MicrophoneAccess) -> AudioStatus {
+    let wanted = stored_audio(stored);
+    AudioStatus {
+        supported: platform::SUPPORTED,
+        system: wanted.system,
+        microphone: wanted.microphone,
+        microphone_access: access,
+    }
+}
+
+/// The code `recording_start` rejects with when the microphone is switched on but not allowed
+/// (not yet asked, denied or revoked, restricted). The overlay offers to record without it.
+/// Mirrored in `src/ipc.ts`.
+pub const MICROPHONE_UNAVAILABLE: &str = "microphoneUnavailable";
+
+/// Decides what a recording takes: the stored choices, minus a microphone that is not allowed
+/// when the user chose to go on without it. Without that choice a microphone that is switched on
+/// but not allowed is refused, never dropped silently.
+fn plan_audio(wanted: AudioChoice, without_microphone: bool) -> Result<AudioChoice, &'static str> {
+    // The permission is not even looked at while the microphone is off (ADR-037).
+    if !wanted.microphone {
+        return Ok(wanted);
+    }
+    plan_microphone(wanted, platform::microphone_access(), without_microphone)
+}
+
+fn plan_microphone(
+    wanted: AudioChoice,
+    access: MicrophoneAccess,
+    without_microphone: bool,
+) -> Result<AudioChoice, &'static str> {
+    if !wanted.microphone || access == MicrophoneAccess::Authorized {
+        return Ok(wanted);
+    }
+    if without_microphone {
+        return Ok(AudioChoice {
+            microphone: false,
+            ..wanted
+        });
+    }
+    Err(MICROPHONE_UNAVAILABLE)
+}
+
+/// The review window's notice: why the recording ended early, then what went wrong with the sound.
+fn join_notices(reason: Option<String>, audio: Vec<String>) -> Option<String> {
+    let all: Vec<String> = reason.into_iter().chain(audio).collect();
+    (!all.is_empty()).then(|| all.join(" "))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -170,6 +268,8 @@ pub struct StartRequest {
     pub bitrate: u32,
     pub fps: u32,
     pub output: PathBuf,
+    /// The sound sources to record; none is a silent video and touches no audio API.
+    pub audio: AudioChoice,
     /// Called once, from a backend thread, when the stream or the encoder fails mid-recording.
     pub on_failure: std::sync::Arc<dyn Fn(String) + Send + Sync>,
 }
@@ -177,6 +277,8 @@ pub struct StartRequest {
 /// A finalized recording as the backend reports it.
 pub struct Finalized {
     pub duration: Duration,
+    /// Problems with the sound, in words for the user; empty when it went well.
+    pub notices: Vec<String>,
 }
 
 /// Why `Machine::begin_start` said no.
@@ -202,6 +304,7 @@ struct Machine {
     finished: Option<Finished>,
     /// A save dialog or copy is running: the file must stay.
     saving: bool,
+    audio: AudioChoice,
 }
 
 impl Default for Machine {
@@ -216,6 +319,7 @@ impl Default for Machine {
             file: None,
             finished: None,
             saving: false,
+            audio: AudioChoice::default(),
         }
     }
 }
@@ -237,6 +341,13 @@ impl Machine {
             ..Machine::default()
         };
         Ok(self.id)
+    }
+
+    /// The sound sources of the recording that is starting.
+    fn set_audio(&mut self, id: u64, audio: AudioChoice) {
+        if self.id == id {
+            self.audio = audio;
+        }
     }
 
     fn is(&self, id: u64, phase: Phase) -> bool {
@@ -357,6 +468,8 @@ impl Machine {
             bytes: finished.map_or(bytes, |f| f.bytes),
             duration_ms: finished.map(|f| f.duration.as_millis() as u64),
             notice: finished.and_then(|f| f.notice.clone()),
+            system_audio: self.audio.system,
+            microphone: self.audio.microphone,
         }
     }
 }
@@ -539,6 +652,7 @@ pub fn recording_start(
     window: WebviewWindow,
     session: u64,
     region: PixelRect,
+    without_microphone: Option<bool>,
     capture: State<CaptureState>,
     _recording: State<RecordingState>,
 ) -> Result<RecordingStatus, String> {
@@ -549,8 +663,14 @@ pub fn recording_start(
     if !crate::capture::has_permission() {
         return Err(RecordingError::PermissionDenied.to_string());
     }
+    // Before the overlay closes: a refused microphone leaves the selection on screen, where the
+    // user can record without it (ADR-037).
+    let audio = plan_audio(
+        stored_audio(&settings::load(&app)),
+        without_microphone.unwrap_or(false),
+    )?;
     let target = capture.begin_recording(session, index, region)?;
-    begin(&app, target, region, || {
+    begin(&app, target, region, audio, || {
         overlay::hand_off_to_recording(&app, session)
     })
 }
@@ -562,6 +682,7 @@ fn begin(
     app: &AppHandle,
     target: overlay::RecordingTarget,
     region: PixelRect,
+    audio: AudioChoice,
     take_over: impl FnOnce() -> bool,
 ) -> Result<RecordingStatus, String> {
     let recording = app.state::<RecordingState>();
@@ -592,6 +713,7 @@ fn begin(
             return Err("Save or discard the previous recording first.".into());
         }
     };
+    recording.machine().set_audio(id, audio);
     if !take_over() {
         recording.machine().fail_start(id);
         return Err("The capture is no longer active.".into());
@@ -613,6 +735,7 @@ fn begin(
             bitrate,
             fps: RECORDING_FPS,
             output,
+            audio,
             on_failure: {
                 let app = app.clone();
                 std::sync::Arc::new(move |message| {
@@ -631,6 +754,7 @@ pub fn stress_record(
     app: &AppHandle,
     seconds: u64,
     quit_mid_recording: bool,
+    audio: AudioChoice,
 ) -> Result<String, String> {
     use std::time::Duration;
 
@@ -639,7 +763,7 @@ pub fn stress_record(
         return Err("a capture or recording is open".into());
     }
     // The lock is released by the recording's own end, or here when it never starts.
-    let result = stress_inner(app, seconds, quit_mid_recording);
+    let result = stress_inner(app, seconds, quit_mid_recording, audio);
     if result.is_err() && app.state::<RecordingState>().machine().phase == Phase::Idle {
         capture.release_recording();
     }
@@ -649,7 +773,10 @@ pub fn stress_record(
         app: &AppHandle,
         seconds: u64,
         quit_mid_recording: bool,
+        audio: AudioChoice,
     ) -> Result<String, String> {
+        let audio = plan_audio(audio, false)
+            .map_err(|code| format!("the microphone is not allowed ({code})"))?;
         let (frames, _) = crate::capture::capture_displays().map_err(|e| e.to_string())?;
         let frame = frames.first().ok_or("no display")?;
         let region = PixelRect {
@@ -665,7 +792,7 @@ pub fn stress_record(
         };
         drop(frames);
         let state = app.state::<RecordingState>();
-        let started = begin(app, target, region, || true)?;
+        let started = begin(app, target, region, audio, || true)?;
         let id = started.id.ok_or("no recording id")?;
         let wait_for = |phase: Phase, timeout: Duration| -> Result<(), String> {
             let from = Instant::now();
@@ -825,7 +952,7 @@ fn finalized(
         Ok(Finished {
             bytes,
             duration: finalized.duration,
-            notice: reason.notice(),
+            notice: join_notices(reason.notice(), finalized.notices),
         })
     });
     match outcome {
@@ -916,6 +1043,72 @@ pub fn recording_discard(
 #[tauri::command]
 pub fn recording_status(state: State<RecordingState>) -> RecordingStatus {
     state.status()
+}
+
+/// The stored sound choices and the microphone permission, for the main window. Never prompts.
+#[tauri::command]
+pub fn recording_audio(app: AppHandle) -> AudioStatus {
+    audio_status(&settings::load(&app), platform::microphone_access())
+}
+
+/// A sound source of a recording.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AudioKind {
+    System,
+    Microphone,
+}
+
+/// Switches a sound source on or off and remembers it. Turning the microphone on is the moment the
+/// system may ask for permission (only while it has not been asked); a denied or restricted
+/// microphone stays off, and the answer says why so the page can show how to allow it. Nothing
+/// here runs, and no permission is looked at, while both sources stay off.
+#[tauri::command]
+pub async fn recording_set_audio(
+    app: AppHandle,
+    window: WebviewWindow,
+    kind: AudioKind,
+    enabled: bool,
+) -> Result<AudioStatus, String> {
+    if window.label() != crate::MAIN_WINDOW {
+        return Err("sound can only be changed in the main window".into());
+    }
+    if !platform::SUPPORTED {
+        return Err(RecordingError::Unsupported.to_string());
+    }
+    let mut stored = settings::load(&app);
+    match kind {
+        AudioKind::System => stored.record_system_audio = enabled,
+        AudioKind::Microphone => {
+            let mut allowed = platform::microphone_access();
+            if enabled && allowed == MicrophoneAccess::NotDetermined {
+                allowed = ask_for_microphone().await;
+            }
+            // Whatever the answer, only an allowed microphone is switched on.
+            stored.record_microphone = enabled && allowed == MicrophoneAccess::Authorized;
+        }
+    }
+    settings::save(&app, &stored)?;
+    Ok(audio_status(&stored, platform::microphone_access()))
+}
+
+/// Shows the system's microphone prompt and waits for the answer.
+async fn ask_for_microphone() -> MicrophoneAccess {
+    let (answer, wait) = std::sync::mpsc::channel();
+    platform::request_microphone_access(Box::new(move |granted| {
+        let _ = answer.send(granted);
+    }));
+    // The prompt waits for the user; ten minutes is longer than anyone leaves it.
+    let granted = tauri::async_runtime::spawn_blocking(move || {
+        wait.recv_timeout(Duration::from_secs(600)).unwrap_or(false)
+    })
+    .await
+    .unwrap_or(false);
+    if granted {
+        MicrophoneAccess::Authorized
+    } else {
+        platform::microphone_access()
+    }
 }
 
 /// What `recording_copy` puts on the clipboard.
@@ -1323,6 +1516,149 @@ mod tests {
             (Phase::Finished, Some(5_000), 1234)
         );
         assert_eq!(status.notice.as_deref(), Some("capped"));
+    }
+
+    const BOTH: AudioChoice = AudioChoice {
+        system: true,
+        microphone: true,
+    };
+    const MIC: AudioChoice = AudioChoice {
+        system: false,
+        microphone: true,
+    };
+
+    #[test]
+    fn with_both_sources_off_nothing_is_asked_whatever_the_permission_is() {
+        for access in [
+            MicrophoneAccess::NotDetermined,
+            MicrophoneAccess::Authorized,
+            MicrophoneAccess::Denied,
+            MicrophoneAccess::Restricted,
+            MicrophoneAccess::Unsupported,
+        ] {
+            for without in [false, true] {
+                assert_eq!(
+                    plan_microphone(AudioChoice::default(), access, without),
+                    Ok(AudioChoice::default()),
+                    "{access:?}"
+                );
+            }
+        }
+        assert!(!AudioChoice::default().any());
+    }
+
+    #[test]
+    fn system_audio_needs_no_microphone_permission() {
+        let system = AudioChoice {
+            system: true,
+            microphone: false,
+        };
+        assert_eq!(
+            plan_microphone(system, MicrophoneAccess::Denied, false),
+            Ok(system)
+        );
+    }
+
+    #[test]
+    fn an_allowed_microphone_is_recorded() {
+        assert_eq!(
+            plan_microphone(BOTH, MicrophoneAccess::Authorized, false),
+            Ok(BOTH)
+        );
+    }
+
+    #[test]
+    fn a_microphone_that_is_not_allowed_is_refused_not_dropped_silently() {
+        for access in [
+            MicrophoneAccess::NotDetermined,
+            MicrophoneAccess::Denied,
+            MicrophoneAccess::Restricted,
+            MicrophoneAccess::Unsupported,
+        ] {
+            assert_eq!(
+                plan_microphone(BOTH, access, false),
+                Err(MICROPHONE_UNAVAILABLE),
+                "{access:?}"
+            );
+            assert_eq!(
+                plan_microphone(MIC, access, false),
+                Err(MICROPHONE_UNAVAILABLE),
+                "{access:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn going_on_without_the_microphone_keeps_the_other_source() {
+        assert_eq!(
+            plan_microphone(BOTH, MicrophoneAccess::Denied, true),
+            Ok(AudioChoice {
+                system: true,
+                microphone: false
+            })
+        );
+        assert_eq!(
+            plan_microphone(MIC, MicrophoneAccess::Denied, true),
+            Ok(AudioChoice::default())
+        );
+    }
+
+    #[test]
+    fn the_stored_choices_become_the_audio_status() {
+        let stored = settings::Settings {
+            record_microphone: true,
+            ..settings::Settings::default()
+        };
+        let status = audio_status(&stored, MicrophoneAccess::Denied);
+        assert_eq!(
+            (status.system, status.microphone, status.microphone_access),
+            (false, true, MicrophoneAccess::Denied)
+        );
+        let off = audio_status(
+            &settings::Settings::default(),
+            MicrophoneAccess::NotDetermined,
+        );
+        assert_eq!((off.system, off.microphone), (false, false));
+        assert_eq!(stored_audio(&stored), MIC);
+    }
+
+    #[test]
+    fn the_notice_joins_the_stop_reason_and_the_sound_problems() {
+        assert_eq!(join_notices(None, vec![]), None);
+        assert_eq!(
+            join_notices(Some("Stopped.".into()), vec![]),
+            Some("Stopped.".into())
+        );
+        assert_eq!(
+            join_notices(None, vec!["No microphone audio.".into()]),
+            Some("No microphone audio.".into())
+        );
+        assert_eq!(
+            join_notices(Some("Stopped.".into()), vec!["A.".into(), "B.".into()]),
+            Some("Stopped. A. B.".into())
+        );
+    }
+
+    #[test]
+    fn the_status_says_which_sound_the_recording_has() {
+        let mut machine = Machine::default();
+        let now = Instant::now();
+        assert!(!machine.status(now, 0).system_audio && !machine.status(now, 0).microphone);
+        let id = machine
+            .begin_start(Duration::from_secs(300), (640, 480))
+            .unwrap();
+        machine.set_audio(id, BOTH);
+        let status = machine.status(now, 0);
+        assert!(status.system_audio && status.microphone);
+        // Another recording's id changes nothing.
+        machine.set_audio(id + 1, AudioChoice::default());
+        assert!(machine.status(now, 0).microphone);
+        // The next recording starts with its own choice.
+        machine.fail_start(id);
+        let next = machine
+            .begin_start(Duration::from_secs(300), (1, 1))
+            .unwrap();
+        assert!(!machine.status(now, 0).system_audio, "{next}");
     }
 
     #[test]

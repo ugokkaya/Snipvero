@@ -9,6 +9,9 @@ use super::AppId;
 const SCREEN_RECORDING_SETTINGS: &str =
     "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture";
 
+const MICROPHONE_SETTINGS: &str =
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone";
+
 pub fn frontmost_app() -> Option<AppId> {
     let pid = NSWorkspace::sharedWorkspace()
         .frontmostApplication()?
@@ -24,6 +27,12 @@ pub fn activate_app(pid: AppId) {
 
 pub fn open_screen_recording_settings() -> Result<(), String> {
     let url = NSURL::URLWithString(&NSString::from_str(SCREEN_RECORDING_SETTINGS))
+        .ok_or("invalid settings URL")?;
+    open(&url, "System Settings could not be opened")
+}
+
+pub fn open_microphone_settings() -> Result<(), String> {
+    let url = NSURL::URLWithString(&NSString::from_str(MICROPHONE_SETTINGS))
         .ok_or("invalid settings URL")?;
     open(&url, "System Settings could not be opened")
 }

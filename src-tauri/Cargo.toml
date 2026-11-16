@@ -56,12 +56,16 @@ objc2-screen-capture-kit = { version = "0.3", default-features = false, features
     "objc2-core-media",
 ] }
 # Screen recording (ADR-037): typed bindings to AVAssetWriter and CMSampleBuffer for the MP4 encoder
-# (VideoToolbox hardware H.264 through AVFoundation, no bundled codec). The alternative is
+# (VideoToolbox hardware H.264 through AVFoundation, no bundled codec) and, for the optional
+# microphone, AVCaptureSession with an audio data output. The alternative is
 # hand-written extern "C"/msg_send! for dozens of selectors, which is less safe and more code.
 # Same maintainers, generator and `Zlib OR Apache-2.0 OR MIT` licence as the crates above; default
 # features off, and only the feature names the code uses.
-objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-media", "AVAssetWriter", "AVAssetWriterInput", "AVMediaFormat", "AVVideoSettings"] }
-objc2-core-media = { version = "0.3", default-features = false, features = ["std", "CMSampleBuffer", "CMSync", "CMTime"] }
+objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "dispatch2", "objc2-core-media", "objc2-core-audio-types", "AVAssetWriter", "AVAssetWriterInput", "AVCaptureAudioDataOutput", "AVCaptureDevice", "AVCaptureInput", "AVCaptureOutput", "AVCaptureOutputBase", "AVCaptureSession", "AVMediaFormat", "AVVideoSettings"] }
+objc2-core-media = { version = "0.3", default-features = false, features = ["std", "CMBlockBuffer", "CMFormatDescription", "CMSampleBuffer", "CMSync", "CMTime", "objc2-core-audio-types"] }
+# Audio for screen recordings (ADR-037): the sample formats of both audio sources and the PCM we hand
+# to the encoder. Already in the tree through the two crates above; named directly for its types.
+objc2-core-audio-types = { version = "0.3", default-features = false, features = ["std", "CoreAudioBaseTypes"] }
 # The serial queue that receives the stream's frames. Already in the tree (rfd, tao); only named
 # directly now because the queue is created here.
 dispatch2 = { version = "0.3", default-features = false, features = ["std", "objc2"] }

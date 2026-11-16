@@ -8,6 +8,7 @@ import {
   recordingStatus,
   type RecordingStatus,
 } from "../ipc";
+import { soundLabel } from "./audio";
 import { formatBytes, formatClock, recordingFileName } from "./format";
 
 const errorMessage = (error: unknown) =>
@@ -77,7 +78,6 @@ function Review({ id, status }: { id: number; status: RecordingStatus }) {
           <video
             src={recordingSource(id)}
             controls
-            muted
             preload="metadata"
             onError={() => setPreviewFailed(true)}
           />
@@ -93,6 +93,10 @@ function Review({ id, status }: { id: number; status: RecordingStatus }) {
         <div>
           <dt>Length</dt>
           <dd>{formatClock(status.durationMs ?? 0)}</dd>
+        </div>
+        <div>
+          <dt>Sound</dt>
+          <dd>{soundLabel(status.systemAudio, status.microphone)}</dd>
         </div>
         <div>
           <dt>File</dt>

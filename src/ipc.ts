@@ -242,16 +242,57 @@ export interface RecordingStatus {
   height: number;
   bytes: number;
   durationMs: number | null;
-  /** Why the recording ended other than by the user (the maximum length, an encoder error). */
+  /** Why the recording ended other than by the user (the maximum length, an encoder error), and what went wrong with the sound. */
   notice: string | null;
+  /** The sound sources this recording has; both false is a silent video. */
+  systemAudio: boolean;
+  microphone: boolean;
+}
+
+/** `recording::MicrophoneAccess`. `unsupported`: this platform cannot record sound yet. */
+export type MicrophoneAccess =
+  "notDetermined" | "authorized" | "denied" | "restricted" | "unsupported";
+
+/** `recording::AudioStatus`: the stored sound choices (both off by default) and the permission. */
+export interface AudioStatus {
+  supported: boolean;
+  system: boolean;
+  /** The stored choice; it only counts while `microphoneAccess` is `authorized`. */
+  microphone: boolean;
+  microphoneAccess: MicrophoneAccess;
 }
 
 /**
- * Records `region` (frame pixels) of the display this overlay shows. On success Rust closes the
- * overlays first, so the selection is never in the video; the tray then stops the recording.
+ * What `recordingStart` rejects with when the microphone is switched on but not allowed (not yet
+ * asked, denied or turned off in System Settings). The overlay then offers to record without it.
+ * Mirrors `recording::MICROPHONE_UNAVAILABLE`.
  */
-export const recordingStart = (session: number, region: Rect) =>
-  invoke<RecordingStatus>("recording_start", { session, region });
+export const MICROPHONE_UNAVAILABLE = "microphoneUnavailable";
+
+/** `system` needs only the Screen Recording permission; `microphone` may show the system prompt. */
+export type AudioKind = "system" | "microphone";
+
+/** The stored sound choices and the microphone permission. Never prompts. */
+export const recordingAudio = () => invoke<AudioStatus>("recording_audio");
+
+/**
+ * Switches a sound source on or off and remembers it. Turning the microphone on is when the system
+ * asks for permission (once); a microphone that is not allowed stays off in the answer.
+ */
+export const recordingSetAudio = (kind: AudioKind, enabled: boolean) =>
+  invoke<AudioStatus>("recording_set_audio", { kind, enabled });
+
+/** Opens System Settings → Privacy & Security → Microphone. */
+export const openMicrophoneSettings = () => invoke("open_microphone_settings");
+
+/**
+ * Records `region` (frame pixels) of the display this overlay shows. On success Rust closes the
+ * overlays first, so the selection is never in the video; the tray then stops the recording. The
+ * sound comes from the stored choices; a microphone that is switched on but not allowed rejects with
+ * `MICROPHONE_UNAVAILABLE` unless `withoutMicrophone` says to go on without it.
+ */
+export const recordingStart = (session: number, region: Rect, withoutMicrophone = false) =>
+  invoke<RecordingStatus>("recording_start", { session, region, withoutMicrophone });
 
 export const recordingStatus = () => invoke<RecordingStatus>("recording_status");
 

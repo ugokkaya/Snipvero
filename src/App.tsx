@@ -24,6 +24,7 @@ import {
   type ShortcutStatus,
 } from "./ipc";
 import { detectPlatform, shortcutLabel } from "./platform";
+import { RecordingAudio } from "./recording/RecordingAudio";
 import { ShortcutRow } from "./ShortcutRow";
 import { StatusRow, type Tone } from "./StatusRow";
 import { UpdatesRow } from "./Updates";
@@ -131,9 +132,10 @@ export function App() {
             Record Region
           </button>
           <p className="hint">
-            Records the selected region as an MP4 video without sound. Stop it from the menu bar
+            Records the selected region as an MP4 video. Stop it from the menu bar
             {shortcut?.registered && shortcutText ? ` or with ${shortcutText}` : ""}.
           </p>
+          {captureSupported && <RecordingAudio />}
         </section>
 
         {captureError && !needsPermission && (

@@ -50,6 +50,8 @@ pub fn run() {
             export::overlay_save,
             recording::recording_start,
             recording::recording_status,
+            recording::recording_audio,
+            recording::recording_set_audio,
             recording::recording_discard,
             recording::recording_save,
             recording::recording_copy,
@@ -60,6 +62,7 @@ pub fn run() {
             show_about,
             open_link,
             open_screen_recording_settings,
+            open_microphone_settings,
             restart_app,
             shortcut::shortcut_set,
             shortcut::shortcut_suspend,
@@ -206,6 +209,11 @@ fn open_screen_recording_settings() -> Result<(), String> {
     system::open_screen_recording_settings()
 }
 
+#[tauri::command]
+fn open_microphone_settings() -> Result<(), String> {
+    system::open_microphone_settings()
+}
+
 /// macOS may only apply a newly granted Screen Recording permission after a restart.
 #[tauri::command]
 fn restart_app(app: AppHandle) {
@@ -291,6 +299,34 @@ mod tests {
             "\"",
         );
         assert!(is_apple_version(build), "bundleVersion {build:?}");
+    }
+
+    /// Microphone access of a hardened-runtime app needs the usage text (else macOS ends the app on
+    /// first access) and exactly one entitlement, which the bundler applies (ADR-037).
+    #[test]
+    fn microphone_text_and_the_single_entitlement_are_in_the_bundle_inputs() {
+        let plist = include_str!("../Info.plist");
+        let text = between(
+            plist,
+            "<key>NSMicrophoneUsageDescription</key>",
+            "</string>",
+        )
+        .trim()
+        .strip_prefix("<string>")
+        .expect("string value");
+        assert!(
+            text.contains("only when you turn on microphone"),
+            "{text:?}"
+        );
+
+        let entitlements = include_str!("../Entitlements.plist");
+        assert_eq!(entitlements.matches("<key>").count(), 1);
+        assert!(
+            entitlements.contains("<key>com.apple.security.device.audio-input</key>\n  <true/>")
+        );
+        let config = include_str!("../tauri.conf.json");
+        assert!(config.contains("\"entitlements\": \"Entitlements.plist\""));
+        assert!(config.contains("\"hardenedRuntime\": true"));
     }
 
     #[test]

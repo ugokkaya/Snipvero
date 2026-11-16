@@ -212,6 +212,50 @@ a {
   opacity: 0.5;
 }
 
+/* The sound switches under Record Region: two checkboxes side by side, off by default. */
+.audio-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  min-width: 0;
+  margin: 6px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.audio-options legend {
+  float: left;
+  margin-right: 12px;
+  padding: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.audio-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.95rem;
+}
+
+.audio-option:has(input:disabled) {
+  opacity: 0.5;
+}
+
+.audio-guidance {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.92rem;
+  background: var(--surface);
+}
+
+.audio-guidance p {
+  margin: 0 0 6px;
+}
+
 .capture-label {
   flex: 1;
   text-align: left;
@@ -699,6 +743,19 @@ a {
 .overlay-notice {
   max-width: 60%;
   background: rgb(176 0 32 / 85%);
+}
+
+/* A notice that offers a way on (record without the microphone) takes clicks itself. */
+.overlay-notice .overlay-offer {
+  margin-left: 10px;
+  padding: 2px 8px;
+  border: 1px solid rgb(255 255 255 / 60%);
+  border-radius: 5px;
+  font: inherit;
+  color: #fff;
+  background: rgb(255 255 255 / 15%);
+  pointer-events: auto;
+  cursor: pointer;
 }
 
 .annotations {

@@ -27,6 +27,8 @@ const finished = (overrides: Partial<RecordingStatus> = {}): RecordingStatus => 
   bytes: 1_234_567,
   durationMs: 12_000,
   notice: null,
+  systemAudio: false,
+  microphone: false,
   ...overrides,
 });
 
@@ -122,6 +124,15 @@ describe("recording review", () => {
   it("keeps the GIF export disabled until it exists", async () => {
     await render(finished());
     expect(button("Export as GIF").disabled).toBe(true);
+  });
+
+  it("says which sound the recording has, and plays it unmuted", async () => {
+    await render(finished({ systemAudio: true, microphone: true }));
+    expect(container.textContent).toContain("System audio and microphone");
+    expect(container.querySelector("video")?.muted).toBe(false);
+    document.body.innerHTML = "";
+    await render(finished());
+    expect(container.textContent).toContain("None");
   });
 
   it("explains why the recording ended early", async () => {

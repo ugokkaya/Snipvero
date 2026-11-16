@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use super::{Finalized, RecordingError, StartRequest};
+use super::{Finalized, MicrophoneAccess, RecordingError, StartRequest};
 
 pub const SUPPORTED: bool = false;
 
@@ -32,4 +32,12 @@ pub fn copy_file(_path: &Path) -> Result<(), String> {
 
 pub fn copy_text(_text: &str) -> Result<(), String> {
     Err(RecordingError::Unsupported.to_string())
+}
+
+pub fn microphone_access() -> MicrophoneAccess {
+    MicrophoneAccess::Unsupported
+}
+
+pub fn request_microphone_access(done: Box<dyn FnOnce(bool) + Send>) {
+    done(false);
 }

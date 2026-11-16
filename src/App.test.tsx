@@ -2,13 +2,16 @@
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AppInfo, AppStatus } from "./ipc";
+import type { AppInfo, AppStatus, AudioStatus } from "./ipc";
 
 const ipc = vi.hoisted(() => ({
   appInfo: vi.fn(),
   appStatus: vi.fn(),
   startCapture: vi.fn(),
   startRecording: vi.fn(),
+  recordingAudio: vi.fn(),
+  recordingSetAudio: vi.fn(),
+  openMicrophoneSettings: vi.fn(),
   showAbout: vi.fn(),
   openLink: vi.fn(),
   openScreenRecordingSettings: vi.fn(),
@@ -49,6 +52,14 @@ const status = (overrides: Partial<AppStatus> = {}): AppStatus => ({
   ...overrides,
 });
 
+const audio = (overrides: Partial<AudioStatus> = {}): AudioStatus => ({
+  supported: true,
+  system: false,
+  microphone: false,
+  microphoneAccess: "notDetermined",
+  ...overrides,
+});
+
 let App: () => ReactElement;
 let root: Root;
 let container: HTMLElement;
@@ -68,6 +79,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   ipc.appInfo.mockResolvedValue(INFO);
   ipc.appStatus.mockResolvedValue(status());
+  ipc.recordingAudio.mockResolvedValue(audio());
   ipc.suspendShortcut.mockResolvedValue(status().shortcut);
   ipc.onCaptureFailed.mockImplementation((handler: (message: string) => void) => {
     captureFailed = handler;
