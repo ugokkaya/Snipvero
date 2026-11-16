@@ -60,6 +60,36 @@ impl PixelRect {
     }
 }
 
+/// The region as a rectangle local to its display's bounds, in logical units.
+fn local_border(region: PixelRect, bounds: LogicalRect, frame: (u32, u32)) -> LogicalRect {
+    let desktop = region.to_logical(bounds, frame);
+    LogicalRect {
+        x: desktop.x - bounds.x,
+        y: desktop.y - bounds.y,
+        ..desktop
+    }
+}
+
+/// A `width × height` badge next to `border`: above it when there is room, else below, else
+/// inside its top edge, and always fully inside `bounds`, even on a tiny selection.
+fn badge_beside(border: LogicalRect, bounds: LogicalRect, width: f64, height: f64) -> LogicalRect {
+    let width = width.min(bounds.width);
+    let height = height.min(bounds.height);
+    let y = if border.y >= height + 6.0 {
+        border.y - height - 6.0
+    } else if border.y + border.height + 6.0 + height <= bounds.height {
+        border.y + border.height + 6.0
+    } else {
+        border.y
+    };
+    LogicalRect {
+        x: border.x.clamp(0.0, bounds.width - width),
+        y: y.clamp(0.0, bounds.height - height),
+        width,
+        height,
+    }
+}
+
 /// Local logical rectangles for the delayed-capture border and badge. The badge prefers the
 /// space above the selection, but must stay visible even at an edge or on a tiny selection.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
@@ -68,28 +98,21 @@ pub fn countdown_layout(
     bounds: LogicalRect,
     frame: (u32, u32),
 ) -> (LogicalRect, LogicalRect) {
-    let desktop = region.to_logical(bounds, frame);
-    let border = LogicalRect {
-        x: desktop.x - bounds.x,
-        y: desktop.y - bounds.y,
-        ..desktop
-    };
-    let width = 112.0_f64.min(bounds.width);
-    let height = 28.0_f64.min(bounds.height);
-    let y = if border.y >= height + 6.0 {
-        border.y - height - 6.0
-    } else if border.y + border.height + 6.0 + height <= bounds.height {
-        border.y + border.height + 6.0
-    } else {
-        border.y
-    };
-    let badge = LogicalRect {
-        x: border.x.clamp(0.0, bounds.width - width),
-        y: y.clamp(0.0, bounds.height - height),
-        width,
-        height,
-    };
-    (border, badge)
+    let border = local_border(region, bounds, frame);
+    (border, badge_beside(border, bounds, 112.0, 28.0))
+}
+
+/// Local logical rectangles for a recording: the border, and the control strip (clock, Stop
+/// button, shortcut hint) of the given size, placed like the countdown's badge.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub fn recording_layout(
+    region: PixelRect,
+    bounds: LogicalRect,
+    frame: (u32, u32),
+    strip: (f64, f64),
+) -> (LogicalRect, LogicalRect) {
+    let border = local_border(region, bounds, frame);
+    (border, badge_beside(border, bounds, strip.0, strip.1))
 }
 
 /// Pixel size of a logical size at `scale`. Rounds to absorb float error from fractional scales
@@ -280,6 +303,42 @@ mod tests {
         assert_eq!(BUILT_IN.cocoa_y(982.0), 0.0);
         // A 1080-pt display top-aligned with a 982-pt primary extends 98 pt below it.
         assert_eq!(LEFT.cocoa_y(982.0), -98.0);
+    }
+
+    #[test]
+    fn the_recording_strip_sits_above_below_or_inside_and_never_leaves_the_display() {
+        let strip = (260.0, 30.0);
+        let frame = (3024, 1964); // BUILT_IN is 1512 × 982 pt at 2×
+        let region = |x, y, width, height| PixelRect {
+            x,
+            y,
+            width,
+            height,
+        };
+        // Room above: the strip sits 6 pt over the border, left-aligned with it.
+        let (border, strip_rect) =
+            recording_layout(region(200, 300, 400, 300), BUILT_IN, frame, strip);
+        assert_eq!((strip_rect.x, strip_rect.y), (border.x, border.y - 36.0));
+        assert_eq!((strip_rect.width, strip_rect.height), strip);
+        // At the top edge: below the region instead.
+        let (border, strip_rect) =
+            recording_layout(region(200, 0, 400, 300), BUILT_IN, frame, strip);
+        assert_eq!(strip_rect.y, border.y + border.height + 6.0);
+        // A region that fills the display: inside, at its top edge.
+        let (_, strip_rect) = recording_layout(region(0, 0, 3024, 1964), BUILT_IN, frame, strip);
+        assert_eq!((strip_rect.x, strip_rect.y), (0.0, 0.0));
+        // At the right edge the strip is pulled back inside the display.
+        let (_, strip_rect) = recording_layout(region(2900, 600, 124, 300), BUILT_IN, frame, strip);
+        assert_eq!(strip_rect.x + strip_rect.width, BUILT_IN.width);
+        // A strip wider than a tiny display is clamped to it.
+        let tiny = LogicalRect {
+            x: 0.0,
+            y: 0.0,
+            width: 100.0,
+            height: 20.0,
+        };
+        let (_, strip_rect) = recording_layout(region(0, 0, 100, 20), tiny, (100, 20), strip);
+        assert_eq!((strip_rect.width, strip_rect.height), (100.0, 20.0));
     }
 
     #[test]

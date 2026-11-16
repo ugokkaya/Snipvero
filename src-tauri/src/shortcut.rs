@@ -85,6 +85,80 @@ impl ShortcutRegistry {
     }
 }
 
+/// The accelerator as a person reads it on a keyboard, for the recording's Stop hint: `⌘⇧2` on
+/// macOS (modifiers in Apple's order ⌃⌥⇧⌘), `Ctrl+Shift+2` elsewhere. The page words the same
+/// thing in `src/shortcut.ts`; this one is for native windows.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub fn display_accelerator(accelerator: &str, mac: bool) -> String {
+    let (mut command, mut control, mut alt, mut shift) = (false, false, false, false);
+    let mut keys = Vec::new();
+    for token in accelerator
+        .split('+')
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+    {
+        match token.to_ascii_lowercase().as_str() {
+            "commandorcontrol" | "cmdorctrl" => {
+                if mac {
+                    command = true;
+                } else {
+                    control = true;
+                }
+            }
+            "command" | "cmd" | "super" | "meta" => command = true,
+            "control" | "ctrl" => control = true,
+            "alt" | "option" => alt = true,
+            "shift" => shift = true,
+            _ => keys.push(readable_key(token)),
+        }
+    }
+    let key = keys.join(" ");
+    if mac {
+        let mut text = String::new();
+        for (held, symbol) in [(control, '⌃'), (alt, '⌥'), (shift, '⇧'), (command, '⌘')] {
+            if held {
+                text.push(symbol);
+            }
+        }
+        text + &key
+    } else {
+        let mut parts = Vec::new();
+        for (held, name) in [
+            (control, "Ctrl"),
+            (alt, "Alt"),
+            (shift, "Shift"),
+            (command, "Win"),
+        ] {
+            if held {
+                parts.push(name.to_string());
+            }
+        }
+        parts.push(key);
+        parts.join("+")
+    }
+}
+
+/// `Digit2` → `2`, `KeyS` → `S`, `PrintScreen` → `Print Screen`; other names are shown as they are.
+fn readable_key(token: &str) -> String {
+    if let Some(digit) = token.strip_prefix("Digit")
+        && digit.len() == 1
+    {
+        return digit.to_string();
+    }
+    if let Some(letter) = token.strip_prefix("Key")
+        && letter.len() == 1
+    {
+        return letter.to_ascii_uppercase();
+    }
+    if token == "PrintScreen" {
+        return "Print Screen".to_string();
+    }
+    if token.len() == 1 {
+        return token.to_ascii_uppercase();
+    }
+    token.to_string()
+}
+
 pub fn plugin() -> TauriPlugin<Wry> {
     tauri_plugin_global_shortcut::Builder::new()
         .with_handler(|app, _shortcut, event| {
@@ -316,6 +390,34 @@ pub fn shortcut_suspend(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_stop_hint_reads_like_the_keyboard() {
+        assert_eq!(display_accelerator("CommandOrControl+Shift+2", true), "⇧⌘2");
+        assert_eq!(
+            display_accelerator("CommandOrControl+Shift+2", false),
+            "Ctrl+Shift+2"
+        );
+        // Apple's order, whatever order the accelerator lists them in.
+        assert_eq!(
+            display_accelerator("Alt+Shift+Control+CommandOrControl+X", true),
+            "⌃⌥⇧⌘X"
+        );
+        assert_eq!(
+            display_accelerator("CommandOrControl+Alt+KeyS", true),
+            "⌥⌘S"
+        );
+        assert_eq!(
+            display_accelerator("Control+Alt+Digit5", false),
+            "Ctrl+Alt+5"
+        );
+        assert_eq!(display_accelerator("PrintScreen", true), "Print Screen");
+        assert_eq!(
+            display_accelerator("CommandOrControl+Shift+F5", true),
+            "⇧⌘F5"
+        );
+        assert_eq!(display_accelerator("Super+Shift+a", false), "Shift+Win+A");
+    }
+
     use super::*;
 
     #[test]

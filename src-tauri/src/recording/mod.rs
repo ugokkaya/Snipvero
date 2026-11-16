@@ -634,12 +634,37 @@ fn refresh_ui(app: &AppHandle, id: u64) {
     tray::show_recording(app, phase, elapsed);
     let text = format!("● {}", clock(elapsed));
     let target = *lock(&state.target);
+    let hint = stop_hint(app);
+    let handle = app.clone();
     let _ = app.run_on_main_thread(move || match (phase, target) {
-        (Phase::Recording, Some(t)) => {
-            overlay::update_recording_indicator(id, t.bounds, t.region, t.frame, &text)
-        }
+        (Phase::Recording, Some(t)) => overlay::update_recording_indicator(
+            id,
+            t.bounds,
+            t.region,
+            t.frame,
+            &text,
+            hint.as_deref(),
+            // The button's own action must not tear its panel down while it runs: stopping from
+            // another thread removes the indicator on a later turn of the main loop.
+            Box::new(move || {
+                let app = handle.clone();
+                std::thread::spawn(move || stop(&app, id, StopReason::User));
+            }),
+        ),
         _ => overlay::hide_recording_indicator(id),
     });
+}
+
+/// What the indicator says about stopping with the keyboard: the capture shortcut as it is
+/// registered now, or nothing when it is not (the Stop button and the tray row still work).
+fn stop_hint(app: &AppHandle) -> Option<String> {
+    let status = app.state::<crate::shortcut::ShortcutRegistry>().status()?;
+    status.registered.then(|| {
+        format!(
+            "or press {}",
+            crate::shortcut::display_accelerator(&status.accelerator, cfg!(target_os = "macos"))
+        )
+    })
 }
 
 /// The tray row, the main window's button and the capture shortcut all end here: start a

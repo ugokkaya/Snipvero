@@ -606,21 +606,26 @@ pub fn precreate_in_background(app: &AppHandle) {
     });
 }
 
-/// Shows or updates the recording indicator around the recorded region: a click-through border and
-/// a clock, on the recorded display. Main thread. Snipvero's windows are never in the video.
+/// Shows or updates the recording indicator around the recorded region: a click-through border,
+/// and beside it a strip with the clock, a **Stop** button (calls `on_stop`) and `hint` (the
+/// shortcut that also stops). Main thread. Snipvero's windows are never in the video.
 pub fn update_recording_indicator(
     id: u64,
     bounds: LogicalRect,
     region: PixelRect,
     frame: (u32, u32),
     text: &str,
+    hint: Option<&str>,
+    on_stop: Box<dyn Fn()>,
 ) {
     #[cfg(target_os = "macos")]
-    if let Err(error) = macos::show_or_update_recording(id, bounds, region, frame, text) {
+    if let Err(error) =
+        macos::show_or_update_recording(id, bounds, region, frame, text, hint, on_stop)
+    {
         eprintln!("[recording] indicator: {error}");
     }
     #[cfg(not(target_os = "macos"))]
-    let _ = (id, bounds, region, frame, text);
+    let _ = (id, bounds, region, frame, text, hint, on_stop);
 }
 
 pub fn hide_recording_indicator(id: u64) {
