@@ -1177,12 +1177,15 @@ Deviations and decisions taken while building it:
 - **Packaging:** `src-tauri/Entitlements.plist` with the one entitlement, `bundle.macOS.entitlements`, `NSMicrophoneUsageDescription` in `src-tauri/Info.plist`;
   `pnpm verify:macos` requires the usage text and exactly that entitlement (verified on a built local-identity `.app` and DMG: all checks pass); RELEASE.md and
   AGENTS.md updated. This ends ADR-020's "no entitlements" statement for the one entitlement above (nothing else changes: no sandbox, no JIT).
-- **Not measured / not verified (macOS only anyway):** (1) **delivered microphone buffers**, their format and their **timestamp offset to system audio**: the
-  machine's screen was locked and the Microphone permission of the test terminal was undecided, so no prompt could be answered. The code logs, per source and
-  recording, `first buffer … arrived N ms after it ended, stamped on / shifted by K frames onto the host clock` so the first real run measures it; a microphone
-  not on the host clock is shifted by a constant (`clock_correction`, tested). (2) A recording with the microphone, grant/deny/reset flows and a revoked
-  permission mid-recording. (3) Long-run A/V drift over 5–10 minutes (the design tolerates ≈ 30 ms in ten minutes). (4) macOS 14 and 15 (only macOS 27 ran).
-  (5) QuickTime playback by a person (AVFoundation reports a playable file). (6) The signed `.app` with real clicks, notarized builds, Windows (stubs only).
+- **Microphone, measured later by the maintainer on a live build (macOS 27.2, built-in microphone, unlocked screen):** the delivered buffers were
+  **24 000 Hz** (958 frames ≈ 40 ms), not the 48 kHz the device reports as its active format, so the per-buffer format reading and the linear resampler were
+  needed, not a fallback. They were **stamped on the host clock** (first buffer arrived 5 ms after it ended, no clock shift), like system audio (2–3 ms).
+  Two recordings (14.0 s and 8.2 s) with both sources: 0 rejected buffers, 0 dropped audio frames, system and microphone buffer counts within 2 % of each other,
+  the last picture held to the end. The maintainer confirmed by listening that system audio and the microphone are both audible, together and alone, and that
+  the switches, the first-use prompt and the video recording work. The offset between the two sources was not measured numerically beyond "both on the host clock".
+- **Still not verified:** (1) denied / reset / revoked-permission flows and a microphone that disappears mid-recording (the maintainer's pass covered the granted
+  path; unconfirmed here), (2) long-run A/V drift over 5–10 minutes (the design tolerates ≈ 30 ms in ten minutes), (3) macOS 14 and 15 (only macOS 27 ran),
+  (4) notarized builds and Windows (stubs only; `cargo check` for the MSVC target could not run here: no C compiler for `ring`).
 
 ### Plan for tasks 2–4 (follow in order; each ends with `pnpm check` and the cargo trio)
 
