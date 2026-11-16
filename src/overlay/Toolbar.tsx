@@ -8,13 +8,24 @@ const BUTTON = 28;
 const GAP = 2;
 const PADDING = 4;
 const SEPARATOR = 7;
-const BUTTONS = 4 + COLORS.length + 3 + 3 + 3;
+const BUTTONS = 4 + COLORS.length + 3 + 3 + 4;
 const SEPARATORS = 4;
+/** The labelled Record button of the record-only toolbar (the `.toolbar-record` CSS width). */
+const RECORD_BUTTON = 88;
 
 export const TOOLBAR_SIZE: Size = {
   width: 2 * PADDING + BUTTONS * BUTTON + SEPARATORS * SEPARATOR + (BUTTONS + SEPARATORS - 1) * GAP,
   height: 2 * PADDING + BUTTON,
 };
+
+/** Opened to choose a region to record: only the Record button is offered. */
+export const RECORD_TOOLBAR_SIZE: Size = {
+  width: 2 * PADDING + RECORD_BUTTON,
+  height: TOOLBAR_SIZE.height,
+};
+
+export const toolbarSize = (mode: "capture" | "record"): Size =>
+  mode === "record" ? RECORD_TOOLBAR_SIZE : TOOLBAR_SIZE;
 
 const icon = (path: ReactNode) => (
   <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
@@ -35,8 +46,17 @@ const TOOLS: readonly { tool: Tool; label: string; icon: ReactNode }[] = [
 
 const SIZE_LABELS = ["Small", "Medium", "Large"] as const;
 
+const RECORD_LABEL = "Record this region as video (annotations are not recorded)";
+const RECORD_ICON = icon(
+  <>
+    <circle cx="8" cy="8" r="5.5" />
+    <circle cx="8" cy="8" r="2.3" fill="currentColor" />
+  </>,
+);
+
 interface Props {
   position: Point;
+  mode: "capture" | "record";
   tool: Tool;
   style: Style;
   canUndo: boolean;
@@ -49,6 +69,8 @@ interface Props {
   send: (action: EditorAction) => void;
   onExport: (action: "copy" | "save") => void;
   onCaptureDelayed: () => void;
+  /** Starts recording the selected region as video. */
+  onRecord: () => void;
 }
 
 function ToolbarTooltip({ id, anchor, label }: { id: string; anchor: HTMLElement; label: string }) {
@@ -86,14 +108,26 @@ export function Toolbar(props: Props) {
     label: string;
     anchor: HTMLElement;
   } | null>(null);
-  const { position, tool, style, canUndo, canRedo, canDelete, canExport, keys, send, onExport } =
-    props;
+  const {
+    position,
+    mode,
+    tool,
+    style,
+    canUndo,
+    canRedo,
+    canDelete,
+    canExport,
+    keys,
+    send,
+    onExport,
+  } = props;
+  const size = toolbarSize(mode);
   const button = (
     key: string,
     label: string,
     content: ReactNode,
     onClick: () => void,
-    options: { pressed?: boolean; disabled?: boolean } = {},
+    options: { pressed?: boolean; disabled?: boolean; className?: string } = {},
   ) => (
     <span
       key={key}
@@ -105,7 +139,7 @@ export function Toolbar(props: Props) {
     >
       <button
         type="button"
-        className="toolbar-button"
+        className={options.className ?? "toolbar-button"}
         aria-label={label}
         aria-describedby={tooltip?.key === key ? tooltipId : undefined}
         tabIndex={-1}
@@ -117,6 +151,20 @@ export function Toolbar(props: Props) {
       </button>
     </span>
   );
+  const recordButton = button(
+    "record",
+    mode === "record" ? "Record this region as video" : RECORD_LABEL,
+    mode === "record" ? (
+      <>
+        {RECORD_ICON}
+        <span>Record</span>
+      </>
+    ) : (
+      RECORD_ICON
+    ),
+    props.onRecord,
+    { disabled: !canExport, ...(mode === "record" && { className: "toolbar-record" }) },
+  );
   return (
     <>
       <div
@@ -125,8 +173,8 @@ export function Toolbar(props: Props) {
         style={{
           left: position.x,
           top: position.y,
-          width: TOOLBAR_SIZE.width,
-          height: TOOLBAR_SIZE.height,
+          width: size.width,
+          height: size.height,
         }}
         // The overlay must not start a selection, and a text being edited must keep focus.
         onPointerDown={(event) => {
@@ -136,89 +184,99 @@ export function Toolbar(props: Props) {
         onClick={() => setTooltip(null)}
         onMouseDown={(event) => event.preventDefault()}
       >
-        {TOOLS.map((t) =>
-          button(
-            t.tool,
-            t.label,
-            t.icon,
-            // Clicking the active drawing tool again returns to select, so no extra click is needed.
-            () => send({ type: "setTool", tool: t.tool === tool ? "select" : t.tool }),
-            { pressed: t.tool === tool },
-          ),
-        )}
-        <span className="toolbar-separator" />
-        {COLORS.map((color) =>
-          button(
-            color,
-            `Color ${color}`,
-            <span className="toolbar-swatch" style={{ background: color }} />,
-            () => send({ type: "setColor", color }),
-            { pressed: color === style.color },
-          ),
-        )}
-        <span className="toolbar-separator" />
-        {([0, 1, 2] as const satisfies readonly SizeLevel[]).map((size) =>
-          button(
-            `size-${size}`,
-            `${SIZE_LABELS[size]} stroke and text`,
-            <span className="toolbar-size" style={{ width: 4 + size * 4, height: 4 + size * 4 }} />,
-            () => send({ type: "setSize", size }),
-            { pressed: size === style.size },
-          ),
-        )}
-        <span className="toolbar-separator" />
-        {button(
-          "undo",
-          `Undo (${keys.undo})`,
-          icon(<path d="M5.5 3 2.5 6l3 3M2.5 6h7a4 4 0 0 1 0 8H7" />),
-          () => send({ type: "undo" }),
-          { disabled: !canUndo },
-        )}
-        {button(
-          "redo",
-          `Redo (${keys.redo})`,
-          icon(<path d="M10.5 3l3 3-3 3M13.5 6h-7a4 4 0 0 0 0 8H9" />),
-          () => send({ type: "redo" }),
-          { disabled: !canRedo },
-        )}
-        {button(
-          "delete",
-          "Delete selected annotation (Delete)",
-          icon(<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 9h5.6l.7-9" />),
-          () => send({ type: "delete" }),
-          { disabled: !canDelete },
-        )}
-        <span className="toolbar-separator" />
-        {button(
-          "delayed",
-          "Capture this region again in 5 seconds (clears annotations)",
-          icon(
-            <>
-              <circle cx="8" cy="9" r="5.5" />
-              <path d="M8 5.5V9l2 1.5M6 1h4M8 1v2" />
-            </>,
-          ),
-          props.onCaptureDelayed,
-          { disabled: !canExport },
-        )}
-        {button(
-          "copy",
-          `Copy to clipboard (${keys.copy})`,
-          icon(
-            <>
-              <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
-              <path d="M10.5 3.5v-.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h.5" />
-            </>,
-          ),
-          () => onExport("copy"),
-          { disabled: !canExport },
-        )}
-        {button(
-          "save",
-          `Save as PNG (${keys.save})`,
-          icon(<path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10" />),
-          () => onExport("save"),
-          { disabled: !canExport },
+        {mode === "record" ? (
+          recordButton
+        ) : (
+          <>
+            {TOOLS.map((t) =>
+              button(
+                t.tool,
+                t.label,
+                t.icon,
+                // Clicking the active drawing tool again returns to select, so no extra click is needed.
+                () => send({ type: "setTool", tool: t.tool === tool ? "select" : t.tool }),
+                { pressed: t.tool === tool },
+              ),
+            )}
+            <span className="toolbar-separator" />
+            {COLORS.map((color) =>
+              button(
+                color,
+                `Color ${color}`,
+                <span className="toolbar-swatch" style={{ background: color }} />,
+                () => send({ type: "setColor", color }),
+                { pressed: color === style.color },
+              ),
+            )}
+            <span className="toolbar-separator" />
+            {([0, 1, 2] as const satisfies readonly SizeLevel[]).map((size) =>
+              button(
+                `size-${size}`,
+                `${SIZE_LABELS[size]} stroke and text`,
+                <span
+                  className="toolbar-size"
+                  style={{ width: 4 + size * 4, height: 4 + size * 4 }}
+                />,
+                () => send({ type: "setSize", size }),
+                { pressed: size === style.size },
+              ),
+            )}
+            <span className="toolbar-separator" />
+            {button(
+              "undo",
+              `Undo (${keys.undo})`,
+              icon(<path d="M5.5 3 2.5 6l3 3M2.5 6h7a4 4 0 0 1 0 8H7" />),
+              () => send({ type: "undo" }),
+              { disabled: !canUndo },
+            )}
+            {button(
+              "redo",
+              `Redo (${keys.redo})`,
+              icon(<path d="M10.5 3l3 3-3 3M13.5 6h-7a4 4 0 0 0 0 8H9" />),
+              () => send({ type: "redo" }),
+              { disabled: !canRedo },
+            )}
+            {button(
+              "delete",
+              "Delete selected annotation (Delete)",
+              icon(<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 9h5.6l.7-9" />),
+              () => send({ type: "delete" }),
+              { disabled: !canDelete },
+            )}
+            <span className="toolbar-separator" />
+            {button(
+              "delayed",
+              "Capture this region again in 5 seconds (clears annotations)",
+              icon(
+                <>
+                  <circle cx="8" cy="9" r="5.5" />
+                  <path d="M8 5.5V9l2 1.5M6 1h4M8 1v2" />
+                </>,
+              ),
+              props.onCaptureDelayed,
+              { disabled: !canExport },
+            )}
+            {button(
+              "copy",
+              `Copy to clipboard (${keys.copy})`,
+              icon(
+                <>
+                  <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
+                  <path d="M10.5 3.5v-.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h.5" />
+                </>,
+              ),
+              () => onExport("copy"),
+              { disabled: !canExport },
+            )}
+            {button(
+              "save",
+              `Save as PNG (${keys.save})`,
+              icon(<path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10" />),
+              () => onExport("save"),
+              { disabled: !canExport },
+            )}
+            {recordButton}
+          </>
         )}
       </div>
       {tooltip && <ToolbarTooltip id={tooltipId} anchor={tooltip.anchor} label={tooltip.label} />}

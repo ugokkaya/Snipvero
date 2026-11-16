@@ -15,6 +15,7 @@
   --warning: #b45309;
   --error: #c4262e;
   --error-bg: rgb(196 38 46 / 8%);
+  --record: #d92d2d;
   --focus: rgb(79 70 229 / 45%);
 
   font-family:
@@ -45,6 +46,7 @@
     --warning: #fbbf24;
     --error: #ff6b6b;
     --error-bg: rgb(255 107 107 / 12%);
+    --record: #ff5a5a;
     --focus: rgb(165 168 255 / 50%);
   }
 }
@@ -180,6 +182,33 @@ a {
 }
 
 .capture-button:disabled {
+  opacity: 0.5;
+}
+
+.record-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface);
+}
+
+.record-button .icon {
+  color: var(--record);
+}
+
+.record-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--text) 25%, transparent);
+}
+
+.record-button:disabled {
   opacity: 0.5;
 }
 
@@ -770,6 +799,39 @@ a {
   opacity: 0.35;
 }
 
+/* The record-only toolbar's one button: the icon and a label, 88 px wide (RECORD_BUTTON). */
+.toolbar-record {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: none;
+  width: 88px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: #d92d2d;
+  cursor: default;
+}
+
+.toolbar-record svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+
+.toolbar-record:hover:not(:disabled) {
+  background: #ef3b3b;
+}
+
+.toolbar-record:disabled {
+  opacity: 0.45;
+}
+
 .toolbar-swatch {
   width: 14px;
   height: 14px;
@@ -788,4 +850,109 @@ a {
   height: 20px;
   margin: 0 3px;
   background: rgb(255 255 255 / 20%);
+}
+
+/* Recording review window */
+
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 22px 16px;
+}
+
+.review h1 {
+  font-size: 1.2rem;
+  font-weight: 650;
+}
+
+.review-player {
+  display: grid;
+  place-items: center;
+  min-height: 200px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #000;
+}
+
+.review-player video {
+  display: block;
+  max-width: 100%;
+  max-height: 360px;
+}
+
+.review-player .review-empty {
+  padding: 24px;
+  color: #d0d0d0;
+}
+
+.review-details {
+  display: flex;
+  gap: 28px;
+  margin: 0;
+}
+
+.review-details dt {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.review-details dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.review-notice {
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+}
+
+.review-note,
+.review-hint {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.review-actions .button {
+  padding: 5px 14px;
+}
+
+.review-actions .button:disabled {
+  opacity: 0.5;
+}
+
+.review-save {
+  padding: 5px 18px;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  color: var(--accent-text);
+  background: var(--accent);
+}
+
+.review-save:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.review-save:disabled {
+  opacity: 0.5;
+}
+
+.review-discard {
+  margin-left: auto;
+  color: var(--error);
+}
+
+.review > .review-empty {
+  padding: 40px 0;
+  text-align: center;
+  color: var(--text-secondary);
 }

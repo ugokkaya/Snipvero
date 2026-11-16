@@ -8,11 +8,13 @@ const ipc = vi.hoisted(() => ({
   appInfo: vi.fn(),
   appStatus: vi.fn(),
   startCapture: vi.fn(),
+  startRecording: vi.fn(),
   showAbout: vi.fn(),
   openLink: vi.fn(),
   openScreenRecordingSettings: vi.fn(),
   restartApp: vi.fn(),
   onCaptureFailed: vi.fn(),
+  onRecordingFailed: vi.fn(),
   checkForUpdate: vi.fn(),
   installUpdate: vi.fn(),
   cancelUpdate: vi.fn(),
@@ -51,6 +53,7 @@ let App: () => ReactElement;
 let root: Root;
 let container: HTMLElement;
 let captureFailed: ((message: string) => void) | undefined;
+let recordingFailed: ((message: string) => void) | undefined;
 
 beforeAll(async () => {
   // The platform is read once when the module loads.
@@ -68,6 +71,10 @@ beforeEach(() => {
   ipc.suspendShortcut.mockResolvedValue(status().shortcut);
   ipc.onCaptureFailed.mockImplementation((handler: (message: string) => void) => {
     captureFailed = handler;
+    return Promise.resolve(() => {});
+  });
+  ipc.onRecordingFailed.mockImplementation((handler: (message: string) => void) => {
+    recordingFailed = handler;
     return Promise.resolve(() => {});
   });
 });
@@ -242,6 +249,18 @@ describe("main window", () => {
     await render();
     await act(async () => captureFailed?.("Screen capture failed: test"));
     expect(container.querySelector(".banner")?.textContent).toBe("Screen capture failed: test");
+  });
+
+  it("starts choosing a region to record, and shows a recording failure", async () => {
+    await render();
+    await click(button("Record Region"));
+    expect(ipc.startRecording).toHaveBeenCalledTimes(1);
+    expect(ipc.startCapture).not.toHaveBeenCalled();
+    await act(async () => recordingFailed?.("Screen recording failed: test"));
+    expect(container.querySelector(".banner")?.textContent).toBe("Screen recording failed: test");
+    // Starting again clears the old message, as a new capture does.
+    await click(button("Record Region"));
+    expect(container.querySelector(".banner")).toBeNull();
   });
 
   it("opens the About window", async () => {

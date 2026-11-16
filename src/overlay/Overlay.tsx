@@ -19,6 +19,7 @@ import {
   overlayReady,
   overlaySave,
   overlaySelect,
+  recordingStart,
   type FrameInfo,
 } from "../ipc";
 import { detectPlatform } from "../platform";
@@ -40,7 +41,7 @@ import { measureLine } from "./measure";
 import { isDragging, selectedRegion, selectionRect } from "./selection";
 import { SelectionView } from "./SelectionView";
 import { TextEditor } from "./TextEditor";
-import { TOOLBAR_SIZE, Toolbar } from "./Toolbar";
+import { Toolbar, toolbarSize } from "./Toolbar";
 
 // Konva is most of the bundle: keep it out of the main window and off the path to showing the
 // frame. Each overlay preloads it once the frame is visible, before the first annotation.
@@ -208,7 +209,7 @@ export function Overlay({ index }: { index: number }) {
    * dialog or an error the overlay stays as it was.
    */
   const exportImage = (action: ExportAction) => {
-    if (!info || !env || exporter.running || delaying.current) return;
+    if (!info || !env || exporter.running || delaying.current || info.mode === "record") return;
     let current = state;
     if (current.annotate.gesture?.type === "editing") {
       const commit = { type: "commitText" } as const;
@@ -251,6 +252,22 @@ export function Overlay({ index }: { index: number }) {
     });
   };
 
+  /**
+   * Records the selected region. Annotations are not part of a video. On success Rust closes the
+   * overlays before the first frame, so there is nothing more to do here.
+   */
+  const record = () => {
+    if (!info || !region || exporter.running || delaying.current) return;
+    delaying.current = true;
+    setExporting(true);
+    setNotice(null);
+    void recordingStart(info.session, region).catch((error: unknown) => {
+      delaying.current = false;
+      setExporting(false);
+      setNotice(String(error));
+    });
+  };
+
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (!info || event.button !== 0) return;
     event.preventDefault(); // No text selection or native drag.
@@ -272,17 +289,18 @@ export function Overlay({ index }: { index: number }) {
   const rect = selectionRect(selection);
   const shown = displayedAnnotations(annotate);
   const editing = annotate.gesture?.type === "editing" ? annotate.gesture.draft : null;
+  const size = info && toolbarSize(info.mode);
   const toolbar =
-    info && region
+    info && region && size
       ? {
           ...placeOutside(
             pixelToClient(region, info.bounds, info),
-            TOOLBAR_SIZE,
+            size,
             info.bounds,
             TOOLBAR_GAP,
             "below",
           ),
-          ...TOOLBAR_SIZE,
+          ...size,
         }
       : null;
   return (
@@ -332,9 +350,10 @@ export function Overlay({ index }: { index: number }) {
           onCommit={() => send({ type: "commitText" })}
         />
       )}
-      {toolbar && (
+      {toolbar && info && (
         <Toolbar
           position={toolbar}
+          mode={info.mode}
           tool={annotate.tool}
           style={annotate.style}
           canUndo={canUndo(annotate)}
@@ -345,6 +364,7 @@ export function Overlay({ index }: { index: number }) {
           send={send}
           onExport={exportImage}
           onCaptureDelayed={captureDelayed}
+          onRecord={record}
         />
       )}
       {notice ? (
@@ -354,7 +374,11 @@ export function Overlay({ index }: { index: number }) {
       ) : (
         info?.focused &&
         selection.phase === "idle" && (
-          <div className="overlay-hud">Drag to select · Esc to cancel</div>
+          <div className="overlay-hud">
+            {info.mode === "record"
+              ? "Drag to select the area to record · Esc to cancel"
+              : "Drag to select · Esc to cancel"}
+          </div>
         )
       )}
     </div>

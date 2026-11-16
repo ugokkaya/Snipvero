@@ -8,15 +8,18 @@ import {
   GitHubIcon,
   InfoIcon,
   MenuBarIcon,
+  RecordIcon,
   ShieldIcon,
 } from "./icons";
 import {
   appStatus,
   onCaptureFailed,
+  onRecordingFailed,
   openScreenRecordingSettings,
   restartApp,
   showAbout,
   startCapture,
+  startRecording,
   type AppStatus,
   type ShortcutStatus,
 } from "./ipc";
@@ -56,13 +59,14 @@ export function App() {
     refresh();
     // Permission can change while the window is open (System Settings).
     window.addEventListener("focus", refresh);
-    const unlisten = onCaptureFailed((message) => {
+    const failed = (message: string) => {
       setCaptureError(message);
       refresh();
-    });
+    };
+    const unlisten = [onCaptureFailed(failed), onRecordingFailed(failed)];
     return () => {
       window.removeEventListener("focus", refresh);
-      void unlisten.then((fn) => fn());
+      for (const pending of unlisten) void pending.then((fn) => fn());
     };
   }, [refresh]);
 
@@ -74,6 +78,11 @@ export function App() {
   const capture = () => {
     setCaptureError(null);
     void startCapture();
+  };
+
+  const record = () => {
+    setCaptureError(null);
+    void startRecording();
   };
 
   let permission: { value: string; tone: Tone };
@@ -111,6 +120,19 @@ export function App() {
           </button>
           <p className="hint">
             Freezes every display. Drag to select a region, press <kbd>Esc</kbd> to cancel.
+          </p>
+          <button
+            type="button"
+            className="record-button"
+            onClick={record}
+            disabled={status !== null && !captureSupported}
+          >
+            <RecordIcon size={16} />
+            Record Region
+          </button>
+          <p className="hint">
+            Records the selected region as an MP4 video without sound. Stop it from the menu bar
+            {shortcut?.registered && shortcutText ? ` or with ${shortcutText}` : ""}.
           </p>
         </section>
 

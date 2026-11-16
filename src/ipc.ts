@@ -1,6 +1,6 @@
 // Typed wrappers around Tauri commands and events.
 // Event names must match `src-tauri/src/events.rs`; commands are registered in `src-tauri/src/lib.rs`.
-import { Channel, invoke } from "@tauri-apps/api/core";
+import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { Rect } from "./overlay/coords";
@@ -11,6 +11,11 @@ export const OVERLAY_SELECTION_CLEARED = "overlay-selection-cleared";
 export const OVERLAY_LABEL_PREFIX = "overlay-";
 export const ABOUT_LABEL = "about";
 export const UPDATE_CHECK_REQUESTED = "update-check-requested";
+export const RECORDING_STATE = "recording-state";
+export const RECORDING_FAILED = "recording-failed";
+export const RECORDING_LABEL = "recording";
+/** URI scheme of the review window's video; Rust serves only the finished recording (ADR-037). */
+export const RECORDING_PROTOCOL = "snipvero-recording";
 
 export interface LogicalRect {
   x: number;
@@ -29,6 +34,8 @@ export interface FrameInfo {
   height: number;
   focused: boolean;
   region: Rect | null;
+  /** `record`: the overlay only chooses a region to record. */
+  mode: "capture" | "record";
 }
 
 export interface ShortcutStatus {
@@ -219,3 +226,56 @@ export function onUpdateCheckRequested(handler: () => void): Promise<UnlistenFn>
 
 /** Stops a running download; nothing has been installed at that point. */
 export const cancelUpdate = () => invoke("update_cancel");
+
+/** Where a recording is (`recording::Phase` in Rust). */
+export type RecordingPhase = "idle" | "starting" | "recording" | "stopping" | "finished";
+
+/** `recording::RecordingStatus`, sent on every state change, never per frame. */
+export interface RecordingStatus {
+  supported: boolean;
+  phase: RecordingPhase;
+  /** Opaque id of the current recording; null while idle. The page never gets a path. */
+  id: number | null;
+  elapsedMs: number;
+  capMs: number;
+  width: number;
+  height: number;
+  bytes: number;
+  durationMs: number | null;
+  /** Why the recording ended other than by the user (the maximum length, an encoder error). */
+  notice: string | null;
+}
+
+/**
+ * Records `region` (frame pixels) of the display this overlay shows. On success Rust closes the
+ * overlays first, so the selection is never in the video; the tray then stops the recording.
+ */
+export const recordingStart = (session: number, region: Rect) =>
+  invoke<RecordingStatus>("recording_start", { session, region });
+
+export const recordingStatus = () => invoke<RecordingStatus>("recording_status");
+
+/** Same as the tray row: start choosing a region, stop the running recording, or review the last. */
+export const startRecording = () => invoke("start_recording");
+
+/** Deletes the finished recording and closes its window. */
+export const recordingDiscard = (id: number) => invoke("recording_discard", { id });
+
+/** Asks where to save the MP4; on `done` the temporary file is gone. */
+export const recordingSave = (id: number, fileName: string) =>
+  invoke<ExportOutcome>("recording_save", { id, fileName });
+
+/** The file itself (to paste in Finder) or its path, valid until the recording is deleted. */
+export const recordingCopy = (id: number, kind: "file" | "path") =>
+  invoke("recording_copy", { id, kind });
+
+/** The video element's source for a finished recording. */
+export const recordingSource = (id: number) => convertFileSrc(String(id), RECORDING_PROTOCOL);
+
+export function onRecordingState(handler: (status: RecordingStatus) => void): Promise<UnlistenFn> {
+  return listen<RecordingStatus>(RECORDING_STATE, (event) => handler(event.payload));
+}
+
+export function onRecordingFailed(handler: (message: string) => void): Promise<UnlistenFn> {
+  return listen<string>(RECORDING_FAILED, (event) => handler(event.payload));
+}
