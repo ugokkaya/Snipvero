@@ -78,6 +78,12 @@ pub fn request_permission() {
     platform::request_permission();
 }
 
+/// Forgets the cached display enumeration; call when the display arrangement changes.
+pub fn invalidate_cache() {
+    #[cfg(target_os = "macos")]
+    platform::invalidate_cache();
+}
+
 /// Captures every display. Blocks the calling thread; do not call from the main thread.
 pub fn capture_displays() -> Result<(Vec<Frame>, CaptureTimings), CaptureError> {
     #[cfg(target_os = "macos")]

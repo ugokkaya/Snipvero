@@ -438,6 +438,7 @@ fn same_displays(captured: &[LogicalRect], current: &[LogicalRect]) -> bool {
 /// during an export, whose save panel is a sheet on an overlay (see `may_cancel`).
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn displays_changed(app: &AppHandle, current: Option<Vec<LogicalRect>>) {
+    capture::invalidate_cache();
     let state = app.state::<CaptureState>();
     let Some(session) = state.active() else {
         return;

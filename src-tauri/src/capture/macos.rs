@@ -1,7 +1,7 @@
 //! ScreenCaptureKit backend (macOS 14+: `SCScreenshotManager`, `SCShareableContent.infoForFilter`).
 
 use std::ptr::NonNull;
-use std::sync::mpsc;
+use std::sync::{Mutex, mpsc};
 use std::time::{Duration, Instant};
 
 use block2::RcBlock;
@@ -35,13 +35,56 @@ pub fn request_permission() {
     CGRequestScreenCaptureAccess();
 }
 
+/// The last display/application enumeration. Asking ScreenCaptureKit again costs ~100 ms on every
+/// capture, which is the largest single part of the delay before the overlay appears. The
+/// snapshot only lists displays and apps (windows are captured live), so it stays valid until
+/// the display arrangement changes; `invalidate_cache` is called then.
+struct Cached(Retained<SCShareableContent>);
+
+// SAFETY: an `SCShareableContent` is an immutable snapshot; it is only read after creation.
+unsafe impl Send for Cached {}
+
+static CACHE: Mutex<Option<Cached>> = Mutex::new(None);
+
+pub fn invalidate_cache() {
+    if let Ok(mut cache) = CACHE.lock() {
+        *cache = None;
+    }
+}
+
+/// The cached enumeration, or a fresh one. `fresh` skips the cache.
+fn content(fresh: bool) -> Result<(Retained<SCShareableContent>, bool), CaptureError> {
+    if !fresh
+        && let Ok(cache) = CACHE.lock()
+        && let Some(Cached(content)) = cache.as_ref()
+    {
+        return Ok((content.clone(), true));
+    }
+    let content = shareable_content()?;
+    if let Ok(mut cache) = CACHE.lock() {
+        *cache = Some(Cached(content.clone()));
+    }
+    Ok((content, false))
+}
+
 pub fn capture_displays() -> Result<(Vec<Frame>, CaptureTimings), CaptureError> {
     if !has_permission() {
         return Err(CaptureError::PermissionDenied);
     }
+    match capture_with(false) {
+        // A stale snapshot (a display changed without a notification) fails or times out:
+        // enumerate again once before giving up.
+        Err(CaptureError::Failed(_)) => {
+            invalidate_cache();
+            capture_with(true)
+        }
+        result => result,
+    }
+}
 
+fn capture_with(fresh: bool) -> Result<(Vec<Frame>, CaptureTimings), CaptureError> {
     let started = Instant::now();
-    let content = shareable_content()?;
+    let (content, _cached) = content(fresh)?;
     let enumerate_ms = elapsed_ms(started);
 
     // Exclude our own windows (main window, stale overlays) from the frozen image.
