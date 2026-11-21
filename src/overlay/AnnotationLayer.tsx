@@ -1,10 +1,28 @@
-// Konva's core plus the three shapes used, instead of every shape and filter (about half the size).
+// Konva's core plus the shapes used, instead of every shape and filter (about half the size).
+import "konva/lib/shapes/Image";
 import "konva/lib/shapes/Line";
 import "konva/lib/shapes/Rect";
 import "konva/lib/shapes/Text";
-import { Group, Layer, Line, Rect as KonvaRect, Stage, Text } from "react-konva/lib/ReactKonvaCore";
-import { annotationBounds, type Annotation, type MeasureLine } from "./annotations";
+import {
+  Group,
+  Image as KonvaImage,
+  Layer,
+  Line,
+  Rect as KonvaRect,
+  Stage,
+  Text,
+} from "react-konva/lib/ReactKonvaCore";
+import { useMemo } from "react";
+import {
+  annotationBounds,
+  drawOrder,
+  isBox,
+  type Annotation,
+  type BlurAnnotation,
+  type MeasureLine,
+} from "./annotations";
 import { pixelRatio, pixelToClient, type Point, type Rect, type Size } from "./coords";
+import { mosaicPatch } from "./mosaic";
 import { annotationShapes } from "./shapes";
 
 const ACCENT = "#6e6af0";
@@ -24,6 +42,8 @@ interface Props {
   annotations: readonly Annotation[];
   selected: Annotation | null;
   measure: MeasureLine;
+  /** The frame canvas at native size, where mosaics take their pixels from. */
+  source: HTMLCanvasElement | null;
 }
 
 /**
@@ -32,7 +52,7 @@ interface Props {
  * pixel ratio, so lines stay sharp on Retina displays. Export draws the same shapes (rasterize.ts).
  */
 export function AnnotationLayer(props: Props) {
-  const { region, origin, view, frame, scale, annotations, selected, measure } = props;
+  const { region, origin, view, frame, scale, annotations, selected, measure, source } = props;
   const css = pixelToClient(region, view, frame);
   if (css.width <= 0 || css.height <= 0) return null;
   const ratio = pixelRatio(view, frame);
@@ -46,8 +66,8 @@ export function AnnotationLayer(props: Props) {
     >
       <Layer scaleX={1 / ratio.x} scaleY={1 / ratio.y} listening={false}>
         <Group x={origin.x - region.x} y={origin.y - region.y}>
-          {annotations.map((a) => (
-            <Shape key={a.id} annotation={a} />
+          {drawOrder(annotations).map((a) => (
+            <Shape key={a.id} annotation={a} origin={origin} source={source} />
           ))}
           {selected && <SelectionMarks annotation={selected} scale={scale} measure={measure} />}
         </Group>
@@ -56,7 +76,13 @@ export function AnnotationLayer(props: Props) {
   );
 }
 
-function Shape({ annotation }: { annotation: Annotation }) {
+interface ShapeProps {
+  annotation: Annotation;
+  origin: Point;
+  source: HTMLCanvasElement | null;
+}
+
+function Shape({ annotation, origin, source }: ShapeProps) {
   return (
     <>
       {annotationShapes(annotation).map((spec, i) => {
@@ -67,16 +93,36 @@ function Shape({ annotation }: { annotation: Annotation }) {
             return <KonvaRect key={i} {...spec.config} />;
           case "text":
             return <Text key={i} {...spec.config} />;
+          case "mosaic":
+            return <Mosaic key={i} blur={spec.blur} origin={origin} source={source} />;
         }
       })}
     </>
   );
 }
 
+/** The pixelated screenshot under a blur; recomputed only when its area or the origin changes. */
+function Mosaic({
+  blur,
+  origin,
+  source,
+}: {
+  blur: BlurAnnotation;
+  origin: Point;
+  source: HTMLCanvasElement | null;
+}) {
+  const { x, y, width, height } = blur.rect;
+  const patch = useMemo(
+    () => (source ? mosaicPatch(source, { x, y, width, height }, blur.block, origin) : null),
+    [source, x, y, width, height, blur.block, origin],
+  );
+  return patch && <KonvaImage image={patch.canvas} x={patch.x} y={patch.y} listening={false} />;
+}
+
 function SelectionMarks(props: { annotation: Annotation; scale: number; measure: MeasureLine }) {
   const { annotation: a, scale, measure } = props;
   const line = { stroke: ACCENT, strokeWidth: scale };
-  if (a.kind === "rect") {
+  if (isBox(a)) {
     const { x, y, width, height } = a.rect;
     const size = HANDLE_CSS * scale;
     const xs = [x, x + width / 2, x + width];

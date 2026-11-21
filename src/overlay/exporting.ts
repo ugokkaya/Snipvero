@@ -9,6 +9,8 @@ import type { Point, Rect, Size } from "./coords";
 export interface LayerPlan extends Size {
   /** Where annotation coordinates (relative to `origin`) start inside the region. */
   offset: Point;
+  /** The region's top-left corner in the frame: where annotation coordinates start there. */
+  origin: Point;
   annotations: readonly Annotation[];
 }
 
@@ -42,7 +44,7 @@ export function layerPlan(
     return overlaps(grown, area);
   });
   if (visible.length === 0 || region.width <= 0 || region.height <= 0) return null;
-  return { width: region.width, height: region.height, offset, annotations: visible };
+  return { width: region.width, height: region.height, offset, origin, annotations: visible };
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -64,11 +66,13 @@ export interface ExportRequest {
   annotations: readonly Annotation[];
   origin: Point;
   measure: MeasureLine;
+  /** The frame canvas at native size; blur areas are cut from it. */
+  source: HTMLCanvasElement | null;
 }
 
 /** IPC and canvas access, injected so the flow is tested without a webview. */
 export interface ExportDeps {
-  rasterize: (plan: LayerPlan) => Promise<Uint8Array>;
+  rasterize: (plan: LayerPlan, source: HTMLCanvasElement | null) => Promise<Uint8Array>;
   copy: (session: number, region: Rect, layer: Uint8Array) => Promise<ExportOutcome>;
   save: (
     session: number,
@@ -103,9 +107,9 @@ export function createExporter(deps: ExportDeps) {
       if (running) return { status: "busy" };
       running = true;
       try {
-        const { session, region, annotations, origin, measure } = request;
+        const { session, region, annotations, origin, measure, source } = request;
         const plan = layerPlan(annotations, region, origin, measure);
-        const layer = plan ? await deps.rasterize(plan) : new Uint8Array();
+        const layer = plan ? await deps.rasterize(plan, source) : new Uint8Array();
         const status =
           action === "copy"
             ? await deps.copy(session, region, layer)

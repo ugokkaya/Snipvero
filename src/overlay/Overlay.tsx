@@ -1,6 +1,7 @@
 import {
   Suspense,
   lazy,
+  useCallback,
   useEffect,
   useMemo,
   useReducer,
@@ -23,6 +24,7 @@ import {
 } from "../ipc";
 import { detectPlatform } from "../platform";
 import { canRedo, canUndo, displayedAnnotations, selectedAnnotation } from "./annotate";
+import { styleControls } from "./annotations";
 import { clientToPixel, pixelToClient, placeOutside, type Rect } from "./coords";
 import {
   INITIAL_EDITOR,
@@ -73,7 +75,14 @@ const report = (session: number, region: Rect | null) =>
  * export. Everything but export runs in the page: no IPC while drawing. Escape cancels.
  */
 export function Overlay({ index }: { index: number }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  // The frame canvas holds the native-resolution capture that mosaics are cut from. State, so the
+  // annotation layer renders again once it exists.
+  const [frameCanvas, setFrameCanvas] = useState<HTMLCanvasElement | null>(null);
+  const frameRef = useCallback((element: HTMLCanvasElement | null) => {
+    canvasRef.current = element;
+    setFrameCanvas(element);
+  }, []);
   const loadedSession = useRef<number | null>(null);
   const [info, setInfo] = useState<FrameInfo | null>(null);
   const [state, dispatch] = useReducer(reducer, INITIAL_EDITOR);
@@ -81,7 +90,7 @@ export function Overlay({ index }: { index: number }) {
   // The exporter guards against a second request before React re-renders; the state disables buttons.
   const [exporter] = useState(() =>
     createExporter({
-      rasterize: async (plan) => (await loadRasterizer()).rasterize(plan),
+      rasterize: async (plan, source) => (await loadRasterizer()).rasterize(plan, source),
       copy: overlayCopy,
       save: overlaySave,
       now: () => new Date(),
@@ -226,6 +235,7 @@ export function Overlay({ index }: { index: number }) {
         annotations: current.annotate.history.present,
         origin: current.origin,
         measure: measureLine,
+        source: canvasRef.current,
       })
       .then((result) => {
         setExporting(false);
@@ -272,6 +282,8 @@ export function Overlay({ index }: { index: number }) {
   const rect = selectionRect(selection);
   const shown = displayedAnnotations(annotate);
   const editing = annotate.gesture?.type === "editing" ? annotate.gesture.draft : null;
+  // A selected annotation decides which style buttons act (a tool only draws the next one).
+  const selectedKind = selectedAnnotation(annotate)?.kind ?? null;
   const toolbar =
     info && region
       ? {
@@ -296,7 +308,7 @@ export function Overlay({ index }: { index: number }) {
       onContextMenu={(event) => event.preventDefault()}
       onDragStart={(event) => event.preventDefault()}
     >
-      <canvas ref={canvasRef} className="overlay-frame" draggable={false} />
+      <canvas ref={frameRef} className="overlay-frame" draggable={false} />
       {info && env && rect && (shown.length > 0 || editing) && (
         <Suspense fallback={null}>
           <AnnotationLayer
@@ -308,6 +320,7 @@ export function Overlay({ index }: { index: number }) {
             annotations={shown}
             selected={editing ? null : selectedAnnotation(annotate)}
             measure={measureLine}
+            source={frameCanvas}
           />
         </Suspense>
       )}
@@ -337,6 +350,7 @@ export function Overlay({ index }: { index: number }) {
           position={toolbar}
           tool={annotate.tool}
           style={annotate.style}
+          controls={styleControls(selectedKind ?? annotate.tool)}
           canUndo={canUndo(annotate)}
           canRedo={canRedo(annotate)}
           canDelete={annotate.selected !== null && annotate.gesture === null}

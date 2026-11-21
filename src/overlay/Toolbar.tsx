@@ -8,7 +8,7 @@ const BUTTON = 28;
 const GAP = 2;
 const PADDING = 4;
 const SEPARATOR = 7;
-const BUTTONS = 4 + COLORS.length + 3 + 3 + 3;
+const BUTTONS = 7 + COLORS.length + 3 + 3 + 3;
 const SEPARATORS = 4;
 
 export const TOOLBAR_SIZE: Size = {
@@ -31,6 +31,26 @@ const TOOLS: readonly { tool: Tool; label: string; icon: ReactNode }[] = [
   { tool: "arrow", label: "Arrow", icon: icon(<path d="M3 13 12.5 3.5M7 3.5h5.5V9" />) },
   { tool: "rect", label: "Rectangle", icon: icon(<rect x="2.5" y="3.5" width="11" height="9" />) },
   { tool: "text", label: "Text", icon: icon(<path d="M3 3.5h10M8 3.5v10M6 13.5h4" />) },
+  {
+    tool: "fill",
+    label: "Fill (cover an area)",
+    icon: icon(<rect x="2.5" y="3.5" width="11" height="9" fill="currentColor" />),
+  },
+  {
+    tool: "blur",
+    label: "Blur (pixelate an area)",
+    icon: icon(
+      <>
+        <rect x="2.5" y="2.5" width="11" height="11" />
+        <path d="M2.5 8h11M8 2.5v11M5.25 2.5v5.5M10.75 8v5.5" />
+      </>,
+    ),
+  },
+  {
+    tool: "highlight",
+    label: "Highlight",
+    icon: icon(<path d="M9.5 2.5l4 4-5.5 5.5H5.5V9.5zM5.5 12l-2 1.5h5" />),
+  },
 ];
 
 const SIZE_LABELS = ["Small", "Medium", "Large"] as const;
@@ -39,6 +59,8 @@ interface Props {
   position: Point;
   tool: Tool;
   style: Style;
+  /** Which style buttons act on the current tool or selection; the others are dimmed. */
+  controls: { color: boolean; size: boolean };
   canUndo: boolean;
   canRedo: boolean;
   canDelete: boolean;
@@ -86,8 +108,19 @@ export function Toolbar(props: Props) {
     label: string;
     anchor: HTMLElement;
   } | null>(null);
-  const { position, tool, style, canUndo, canRedo, canDelete, canExport, keys, send, onExport } =
-    props;
+  const {
+    position,
+    tool,
+    style,
+    controls,
+    canUndo,
+    canRedo,
+    canDelete,
+    canExport,
+    keys,
+    send,
+    onExport,
+  } = props;
   const button = (
     key: string,
     label: string,
@@ -153,7 +186,7 @@ export function Toolbar(props: Props) {
             `Color ${color}`,
             <span className="toolbar-swatch" style={{ background: color }} />,
             () => send({ type: "setColor", color }),
-            { pressed: color === style.color },
+            { pressed: color === style.color, disabled: !controls.color },
           ),
         )}
         <span className="toolbar-separator" />
@@ -163,7 +196,7 @@ export function Toolbar(props: Props) {
             `${SIZE_LABELS[size]} stroke and text`,
             <span className="toolbar-size" style={{ width: 4 + size * 4, height: 4 + size * 4 }} />,
             () => send({ type: "setSize", size }),
-            { pressed: size === style.size },
+            { pressed: size === style.size, disabled: !controls.size },
           ),
         )}
         <span className="toolbar-separator" />

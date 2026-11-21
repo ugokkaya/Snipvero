@@ -8,16 +8,18 @@ import { clamp, spanRect, type Point, type Size } from "./coords";
 import {
   DEFAULT_STYLE,
   annotationAt,
+  blockSize,
   fontSize,
   hitsAnnotation,
+  isBox,
   strokeWidth,
   styleOf,
   translate,
   withStyle,
   type Annotation,
   type ArrowAnnotation,
+  type BoxAnnotation,
   type MeasureLine,
-  type RectAnnotation,
   type SizeLevel,
   type Style,
   type TextAnnotation,
@@ -35,7 +37,7 @@ export interface History {
 const HISTORY_LIMIT = 100;
 
 export type Gesture =
-  | { type: "drawing"; draft: ArrowAnnotation | RectAnnotation; anchor: Point; dragged: boolean }
+  | { type: "drawing"; draft: ArrowAnnotation | BoxAnnotation; anchor: Point; dragged: boolean }
   /** Text tool pressed on empty space: the editor opens on release, after focus has settled. */
   | { type: "placing"; at: Point }
   | {
@@ -50,8 +52,8 @@ export type Gesture =
     }
   | {
       type: "resizing";
-      origin: RectAnnotation;
-      current: RectAnnotation;
+      origin: BoxAnnotation;
+      current: BoxAnnotation;
       start: Point;
       handle: Handle;
     }
@@ -157,14 +159,14 @@ function clampPoint(p: Point, bounds: Size): Point {
 
 type Target = { type: "body" } | { type: "handle"; handle: Handle };
 
-/** What a press at `p` grabs of the selected annotation, if anything. Only rectangles resize. */
+/** What a press at `p` grabs of the selected annotation, if anything. Only boxes resize. */
 function selectedTarget(s: AnnotateState, p: Point, env: AnnotateEnv): Target | null {
   const a = selectedAnnotation(s);
   if (!a) return null;
-  if (a.kind === "rect") {
-    const hit = hitTest(a.rect, p, env.grab + a.width / 2);
+  if (isBox(a)) {
+    const hit = hitTest(a.rect, p, env.grab + (a.kind === "rect" ? a.width / 2 : 0));
     if (hit === "outside") return null;
-    // A selected rectangle can be dragged from inside too, which is easier than its thin border.
+    // A selected box can be dragged from inside too, which is easier than a thin border.
     return hit === "inside" ? { type: "body" } : { type: "handle", handle: hit };
   }
   return hitsAnnotation(a, p, env.grab, env.measure) ? { type: "body" } : null;
@@ -211,7 +213,7 @@ function press(s: AnnotateState, raw: Point, env: AnnotateEnv): AnnotateState {
   const target = selectedTarget(s, raw, env);
   const selected = selectedAnnotation(s);
   if (target && selected) {
-    if (target.type === "handle" && selected.kind === "rect") {
+    if (target.type === "handle" && isBox(selected)) {
       return {
         ...s,
         gesture: {
@@ -234,22 +236,44 @@ function press(s: AnnotateState, raw: Point, env: AnnotateEnv): AnnotateState {
       if (hit?.kind === "text") return select(startMoving(s, hit, point, false), hit, env);
       return { ...s, selected: null, gesture: { type: "placing", at: point } };
     case "arrow":
-    case "rect": {
-      const base = {
-        id: s.nextId,
-        color: s.style.color,
-        width: strokeWidth(s.style.size, env.scale),
-      };
-      const draft: ArrowAnnotation | RectAnnotation =
-        s.tool === "arrow"
-          ? { kind: "arrow", ...base, from: point, to: point }
-          : { kind: "rect", ...base, rect: spanRect(point, point) };
+    case "rect":
+    case "fill":
+    case "blur":
+    case "highlight":
       return {
         ...s,
         selected: null,
-        gesture: { type: "drawing", draft, anchor: point, dragged: false },
+        gesture: { type: "drawing", draft: newDraft(s, point, env), anchor: point, dragged: false },
       };
-    }
+  }
+}
+
+function newDraft(
+  s: AnnotateState,
+  point: Point,
+  env: AnnotateEnv,
+): ArrowAnnotation | BoxAnnotation {
+  const id = s.nextId;
+  const { color } = s.style;
+  const rect = spanRect(point, point);
+  switch (s.tool) {
+    case "arrow":
+      return {
+        kind: "arrow",
+        id,
+        color,
+        width: strokeWidth(s.style.size, env.scale),
+        from: point,
+        to: point,
+      };
+    case "fill":
+      return { kind: "fill", id, color, rect };
+    case "highlight":
+      return { kind: "highlight", id, color, rect };
+    case "blur":
+      return { kind: "blur", id, block: blockSize(env.scale), rect };
+    default:
+      return { kind: "rect", id, color, width: strokeWidth(s.style.size, env.scale), rect };
   }
 }
 
@@ -257,7 +281,7 @@ function press(s: AnnotateState, raw: Point, env: AnnotateEnv): AnnotateState {
 const select = (s: AnnotateState, a: Annotation, env: AnnotateEnv): AnnotateState => ({
   ...s,
   selected: a.id,
-  style: styleOf(a, env.scale),
+  style: styleOf(a, env.scale, s.style),
 });
 
 function drag(s: AnnotateState, raw: Point, env: AnnotateEnv): AnnotateState {
@@ -269,7 +293,7 @@ function drag(s: AnnotateState, raw: Point, env: AnnotateEnv): AnnotateState {
       const dragged =
         g.dragged ||
         Math.max(Math.abs(point.x - g.anchor.x), Math.abs(point.y - g.anchor.y)) > env.slop;
-      const draft: ArrowAnnotation | RectAnnotation =
+      const draft: ArrowAnnotation | BoxAnnotation =
         g.draft.kind === "arrow"
           ? { ...g.draft, to: point }
           : { ...g.draft, rect: spanRect(g.anchor, point) };

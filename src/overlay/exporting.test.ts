@@ -94,6 +94,7 @@ const request = (annotations: readonly Annotation[] = []): ExportRequest => ({
   annotations,
   origin: ORIGIN,
   measure,
+  source: null,
 });
 
 function deps(overrides: Partial<ExportDeps> = {}): ExportDeps {
@@ -172,5 +173,48 @@ describe("createExporter", () => {
     expect(await first).toEqual({ status: "done" });
     expect(d.copy).toHaveBeenCalledTimes(1);
     expect(d.save).not.toHaveBeenCalled();
+  });
+});
+
+describe("layerPlan with a blur", () => {
+  const blur: Annotation = {
+    kind: "blur",
+    id: 9,
+    block: 10,
+    rect: { x: 5, y: 5, width: 60, height: 30 },
+  };
+
+  it("sends a layer for a blur alone, with the origin it is cut at", () => {
+    const plan = layerPlan([blur], REGION, { x: 120, y: 40 }, measure);
+    expect(plan).toMatchObject({ width: 400, height: 300, origin: { x: 120, y: 40 } });
+    expect(plan?.annotations).toEqual([blur]);
+  });
+
+  it("leaves out a blur entirely outside the region", () => {
+    const outside = { ...blur, rect: { x: -200, y: -200, width: 60, height: 30 } };
+    expect(layerPlan([outside], REGION, ORIGIN, measure)).toBeNull();
+  });
+});
+
+describe("createExporter with a blur", () => {
+  it("passes the frame canvas to the rasterizer next to the plan", async () => {
+    const source = { width: 1, height: 1 } as HTMLCanvasElement; // Opaque here: only passed through.
+    const deps = {
+      rasterize: vi.fn(async () => new Uint8Array(400 * 300 * 4)),
+      copy: vi.fn(async () => "done" as const),
+      save: vi.fn(async () => "done" as const),
+      now: () => new Date(2026, 0, 1),
+    };
+    const blur: Annotation = {
+      kind: "blur",
+      id: 1,
+      block: 10,
+      rect: { x: 0, y: 0, width: 50, height: 40 },
+    };
+    await createExporter(deps).run("copy", { ...request([blur]), source });
+    expect(deps.rasterize).toHaveBeenCalledWith(
+      expect.objectContaining({ origin: ORIGIN }),
+      source,
+    );
   });
 });

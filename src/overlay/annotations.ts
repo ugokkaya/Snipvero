@@ -6,7 +6,7 @@
 
 import { clamp, type Point, type Rect, type Size } from "./coords";
 
-export type Tool = "select" | "arrow" | "rect" | "text";
+export type Tool = "select" | "arrow" | "rect" | "text" | "fill" | "blur" | "highlight";
 export type SizeLevel = 0 | 1 | 2;
 
 export interface Style {
@@ -55,7 +55,71 @@ export interface TextAnnotation {
   text: string;
 }
 
-export type Annotation = ArrowAnnotation | RectAnnotation | TextAnnotation;
+/** A solid, opaque cover, for hiding what is underneath. */
+export interface FillAnnotation {
+  kind: "fill";
+  id: number;
+  color: string;
+  rect: Rect;
+}
+
+/** A translucent marker over the screenshot, like a highlighter pen. */
+export interface HighlightAnnotation {
+  kind: "highlight";
+  id: number;
+  color: string;
+  rect: Rect;
+}
+
+/** The screenshot underneath turned into mosaic blocks. It has no colour of its own. */
+export interface BlurAnnotation {
+  kind: "blur";
+  id: number;
+  /** Block edge in frame pixels, fixed when drawn so resizing keeps the mosaic coarseness. */
+  block: number;
+  rect: Rect;
+}
+
+export type Annotation =
+  | ArrowAnnotation
+  | RectAnnotation
+  | TextAnnotation
+  | FillAnnotation
+  | HighlightAnnotation
+  | BlurAnnotation;
+
+/** Annotations that are one rectangle, drawn by dragging and resized from eight handles. */
+export type BoxAnnotation = RectAnnotation | FillAnnotation | HighlightAnnotation | BlurAnnotation;
+
+export const isBox = (a: Annotation): a is BoxAnnotation => a.kind !== "arrow" && a.kind !== "text";
+
+/** Mosaic block edge in CSS pixels, so it looks the same on every display. */
+const BLOCK_CSS = 10;
+export const blockSize = (scale: number) => Math.max(2, Math.round(BLOCK_CSS * scale));
+
+/** Opacity of the highlighter; the colour comes from the palette. */
+export const HIGHLIGHT_OPACITY = 0.4;
+
+/**
+ * Which style controls act on a tool or annotation: colour and stroke or text size. The toolbar
+ * keeps all its buttons and dims the ones that do nothing, so its width never changes.
+ */
+export function styleControls(kind: Annotation["kind"] | Tool): { color: boolean; size: boolean } {
+  switch (kind) {
+    case "blur":
+      return { color: false, size: false };
+    case "fill":
+    case "highlight":
+      return { color: true, size: false };
+    default:
+      return { color: true, size: true };
+  }
+}
+
+/** Drawing order: mosaics first, because they change the screenshot itself, not what is on it. */
+export function drawOrder(list: readonly Annotation[]): Annotation[] {
+  return [...list.filter((a) => a.kind === "blur"), ...list.filter((a) => a.kind !== "blur")];
+}
 
 /** Width of one line of text at `fontSize`, in the same units. Injected so tests need no canvas. */
 export type MeasureLine = (line: string, fontSize: number) => number;
@@ -67,6 +131,10 @@ export const fontSize = (size: SizeLevel, scale: number) => Math.round(FONT_CSS[
 
 /** Applies a style to an annotation, or returns the same object if nothing changes. */
 export function withStyle(a: Annotation, style: Style, scale: number): Annotation {
+  if (a.kind === "blur") return a;
+  if (a.kind === "fill" || a.kind === "highlight") {
+    return a.color === style.color ? a : { ...a, color: style.color };
+  }
   if (a.kind === "text") {
     const size = fontSize(style.size, scale);
     return a.color === style.color && a.fontSize === size
@@ -78,7 +146,10 @@ export function withStyle(a: Annotation, style: Style, scale: number): Annotatio
 }
 
 /** The style preset closest to an annotation, so selecting it shows its colour and size. */
-export function styleOf(a: Annotation, scale: number): Style {
+export function styleOf(a: Annotation, scale: number, current: Style = DEFAULT_STYLE): Style {
+  // These have no size, or no colour either: keep what the toolbar shows instead of resetting it.
+  if (a.kind === "blur") return current;
+  if (a.kind === "fill" || a.kind === "highlight") return { color: a.color, size: current.size };
   const value = a.kind === "text" ? a.fontSize : a.width;
   const distance = (level: SizeLevel) =>
     Math.abs((a.kind === "text" ? fontSize(level, scale) : strokeWidth(level, scale)) - value);
@@ -154,6 +225,10 @@ export function annotationBounds(a: Annotation, measure: MeasureLine): Rect {
     }
     case "rect":
       return grow(a.rect, a.width / 2);
+    case "fill":
+    case "highlight":
+    case "blur":
+      return a.rect;
     case "text":
       return { ...a.at, ...textSize(a.text, a.fontSize, measure) };
   }
@@ -187,6 +262,11 @@ export function hitsAnnotation(
       const hollow = inner.width > 0 && inner.height > 0 && contains(inner, p);
       return contains(grow(a.rect, band), p) && !hollow;
     }
+    // Solid areas are grabbed anywhere inside, unlike the outlined rectangle.
+    case "fill":
+    case "highlight":
+    case "blur":
+      return contains(grow(a.rect, tolerance), p);
     case "text":
       return contains(grow(annotationBounds(a, measure), tolerance), p);
   }
@@ -209,6 +289,9 @@ export function translate(a: Annotation, dx: number, dy: number): Annotation {
     case "arrow":
       return { ...a, from: shift(a.from), to: shift(a.to) };
     case "rect":
+    case "fill":
+    case "highlight":
+    case "blur":
       return { ...a, rect: { ...a.rect, ...shift(a.rect) } };
     case "text":
       return { ...a, at: shift(a.at) };

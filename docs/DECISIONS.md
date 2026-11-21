@@ -873,3 +873,40 @@ reported that everything works and requested publication as a new release. Keep 
 at five seconds for this release. This supersedes the pending basic feature QA notes above, but
 does not claim exhaustive mixed-DPI/display-change/keyboard coverage, clean-Mac installation,
 Homebrew installation, Windows runtime support or runtime QA of the notarized distribution candidate.
+
+## ADR-037: Fill, Blur and Highlight tools; mosaic computed in the page
+
+- **Status:** implemented (2026-11-19). Automated tests (vitest) pass on macOS Apple silicon; native
+  macOS QA on Retina and mixed-DPI displays pending. Windows not locally verified.
+- **Context:** users need to hide sensitive parts of a screenshot and to mark areas without an
+  outline. The MVP listed blur and highlighter as out of scope (REQUIREMENTS.md).
+- **Decision:** add three rectangle tools. **Fill** (opaque colour) and **Highlight** (colour at 40%
+  opacity) are ordinary Konva rectangles in the existing layer. **Blur** is a mosaic: each block of
+  `max(2, round(10 × scale))` frame pixels, aligned to the rectangle's top-left corner, becomes the
+  average colour of its pixels. A mosaic is used rather than a Gaussian blur because it keeps one
+  colour per block and nothing else, so it cannot be inverted the way a light blur sometimes can.
+  The block size is stored when the area is drawn and does not change on resize.
+- **Where the pixels are computed:** in the page, by one pure function (`pixelate.ts`) fed from the
+  frame canvas, which already holds the capture at native resolution. The preview and the export
+  therefore run the same code on the same pixels (FR-6.1), and the Rust export pipeline, IPC
+  headers and the raw layer body are unchanged. The mosaic becomes part of the RGBA layer that
+  Rust already blends. Computing it in Rust was considered and rejected: it would need a second
+  implementation kept bit-identical to the preview, a new IPC field and a new Rust test surface.
+  No new dependency, permission or network path; the screenshot still never leaves memory.
+- **Layer order:** mosaics are drawn first, under all other annotations (`drawOrder`). A blur
+  changes the screenshot itself, so an arrow or text drawn on it stays sharp and a later move of
+  the blur never blurs an annotation. Fill and Highlight follow creation order like the rest.
+- **Failure mode:** if a mosaic cannot be made (no 2D canvas, no frame canvas), the export fails
+  with an error instead of silently exporting the unhidden pixels.
+- **Toolbar:** Fill, Blur and Highlight join the first button group without a separator. Colour
+  and size buttons that the active tool or selection ignores (Blur: both; Fill, Highlight: size)
+  are dimmed, not hidden, so the toolbar width stays a constant the overlay can place without
+  measuring. A fill or highlight selected keeps the toolbar's size, and a blur keeps its colour
+  too, instead of resetting them.
+- **Known limit:** the mosaic is as strong as its block size; text under a block of 10 CSS pixels
+  is unreadable at normal sizes, but a very large font in a large capture may keep a hint of its
+  shape. Fill is the choice for secrets.
+- **Verification:** unit tests for `pixelate` (averaging, edge blocks, irreversibility, bad input),
+  annotation geometry and hit tests, the drawing, resize, move and undo flows, shape specs, layer
+  plans, the exporter's source hand-off and the toolbar's dimming. `tsc`, eslint, prettier and a
+  Vite build pass. Rust is untouched.

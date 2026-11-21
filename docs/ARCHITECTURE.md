@@ -190,7 +190,10 @@ Rust            ─▶ Session.begin_export (session, region fits, layer size, n
 ## Annotations
 
 - **Data:** plain serializable objects (`annotations.ts`): arrow (`from`, `to`), outlined rectangle
-  (`rect`), text (`at`, `text`), each with an id, colour and stroke width or font size. All values are
+  (`rect`), text (`at`, `text`), fill, highlight and blur (`rect`; blur also a mosaic `block`), each
+  with an id, colour (not blur) and stroke width or font size (not fill, highlight, blur). Blur is
+  cut from the frame canvas by `mosaic.ts` with the pure `pixelate.ts`, in the preview and in
+  `rasterize.ts` alike, and always drawn under the other annotations (ADR-037). All values are
   in frame physical pixels, relative to the region's top-left corner (`EditorState.origin`), so export
   can draw them onto the cropped region directly. Style presets are CSS sizes multiplied by the
   display's scale when an annotation is created, so strokes look the same on 1× and 2× displays.

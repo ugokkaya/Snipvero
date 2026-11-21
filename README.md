@@ -26,6 +26,8 @@ check for updates.
 - **Annotations:** arrows, outlined rectangles and text in six colours and three sizes. Select,
   move, resize, re-edit and delete them, with full undo and redo. Text supports any language your
   keyboard can type.
+- **Hide or mark areas:** cover an area with a solid **Fill**, **Blur** it into mosaic blocks that
+  cannot be undone in the exported image, or tint it with a translucent **Highlight**.
 - **Sharp on Retina:** the image keeps the display's full pixel resolution, including setups that
   mix Retina and standard displays.
 - **Copy or save:** copy to the clipboard (PNG and TIFF) or save a PNG through the standard save

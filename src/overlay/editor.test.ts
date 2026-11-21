@@ -32,9 +32,9 @@ const onScreen = (s: EditorState) =>
   s.annotate.history.present.map((a) =>
     a.kind === "arrow"
       ? { x: s.origin.x + a.from.x, y: s.origin.y + a.from.y }
-      : a.kind === "rect"
-        ? { x: s.origin.x + a.rect.x, y: s.origin.y + a.rect.y }
-        : { x: s.origin.x + a.at.x, y: s.origin.y + a.at.y },
+      : a.kind === "text"
+        ? { x: s.origin.x + a.at.x, y: s.origin.y + a.at.y }
+        : { x: s.origin.x + a.rect.x, y: s.origin.y + a.rect.y },
   );
 
 // Region (100, 100) 400×300 with one arrow from (150, 150) to (250, 200) on screen.

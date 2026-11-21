@@ -19,6 +19,7 @@ it("shows custom tooltips for every tool, including disabled actions, without ch
         position={{ x: 0, y: 0 }}
         tool="select"
         style={INITIAL_EDITOR.annotate.style}
+        controls={{ color: true, size: true }}
         canUndo={false}
         canRedo={false}
         canDelete={false}
@@ -76,6 +77,7 @@ it("offers a five-second recapture, warns about annotations and disables it duri
           position={{ x: 0, y: 0 }}
           tool="select"
           style={INITIAL_EDITOR.annotate.style}
+          controls={{ color: true, size: true }}
           canUndo={false}
           canRedo={false}
           canDelete={false}
@@ -97,6 +99,58 @@ it("offers a five-second recapture, warns about annotations and disables it duri
     expect(timer?.disabled).toBe(true);
     act(() => timer?.click());
     expect(onCaptureDelayed).toHaveBeenCalledOnce();
+  } finally {
+    act(() => root.unmount());
+  }
+});
+
+it("offers fill, blur and highlight, and dims the style buttons they do not use", () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const send = vi.fn();
+  const render = (controls: { color: boolean; size: boolean }) =>
+    act(() =>
+      root.render(
+        <Toolbar
+          position={{ x: 0, y: 0 }}
+          tool="blur"
+          style={INITIAL_EDITOR.annotate.style}
+          controls={controls}
+          canUndo={false}
+          canRedo={false}
+          canDelete={false}
+          canExport={true}
+          keys={{ undo: "", redo: "", copy: "", save: "" }}
+          send={send}
+          onExport={vi.fn()}
+          onCaptureDelayed={vi.fn()}
+        />,
+      ),
+    );
+  const swatches = () => [
+    ...container.querySelectorAll<HTMLButtonElement>('[aria-label^="Color"]'),
+  ];
+  const sizes = () => [...container.querySelectorAll<HTMLButtonElement>('[aria-label*="stroke"]')];
+  try {
+    render({ color: false, size: false });
+    for (const label of ["Fill", "Blur", "Highlight"]) {
+      expect(container.querySelector(`button[aria-label^="${label}"]`)).not.toBeNull();
+    }
+    expect(
+      container.querySelector('button[aria-label^="Blur"]')?.getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(swatches().length).toBeGreaterThan(0);
+    expect(swatches().every((b) => b.disabled)).toBe(true);
+    expect(sizes().every((b) => b.disabled)).toBe(true);
+    // No button is ever removed, so the toolbar keeps the width the overlay places it with.
+    const count = container.querySelectorAll("button").length;
+    render({ color: true, size: false });
+    expect(swatches().every((b) => !b.disabled)).toBe(true);
+    expect(sizes().every((b) => b.disabled)).toBe(true);
+    expect(container.querySelectorAll("button").length).toBe(count);
+    const highlight = container.querySelector<HTMLButtonElement>('button[aria-label="Highlight"]');
+    act(() => highlight?.click());
+    expect(send).toHaveBeenCalledWith({ type: "setTool", tool: "highlight" });
   } finally {
     act(() => root.unmount());
   }

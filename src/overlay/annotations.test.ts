@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   annotationAt,
   annotationBounds,
+  blockSize,
+  drawOrder,
+  styleControls,
   arrowGeometry,
   distanceToSegment,
   fontSize,
@@ -12,6 +15,9 @@ import {
   translate,
   withStyle,
   type ArrowAnnotation,
+  type BlurAnnotation,
+  type FillAnnotation,
+  type HighlightAnnotation,
   type MeasureLine,
   type RectAnnotation,
   type TextAnnotation,
@@ -157,5 +163,54 @@ describe("style presets", () => {
     expect(styleOf(styled, 2)).toEqual({ color: "#34c759", size: 2 });
     expect(styleOf(text, 1)).toEqual({ color: "#ffffff", size: 1 });
     expect(withStyle(box, { color: box.color, size: 1 }, 1)).toBe(box);
+  });
+});
+
+describe("box annotations: fill, highlight, blur", () => {
+  const rect = { x: 10, y: 10, width: 100, height: 50 };
+  const fill: FillAnnotation = { kind: "fill", id: 5, color: "#000000", rect };
+  const highlight: HighlightAnnotation = { kind: "highlight", id: 6, color: "#ffcc00", rect };
+  const blur: BlurAnnotation = { kind: "blur", id: 7, block: 10, rect };
+
+  it.each([fill, highlight, blur])("grabs a $kind anywhere inside, not only by its border", (a) => {
+    expect(hitsAnnotation(a, { x: 60, y: 35 }, 4, measure)).toBe(true);
+    expect(hitsAnnotation(a, { x: 300, y: 300 }, 4, measure)).toBe(false);
+    expect(annotationBounds(a, measure)).toEqual(rect);
+  });
+
+  it.each([fill, highlight, blur])("moves a $kind with its rectangle", (a) => {
+    expect(translate(a, 5, -5)).toMatchObject({ rect: { x: 15, y: 5, width: 100, height: 50 } });
+  });
+
+  it("recolours a fill or highlight, and leaves a blur alone", () => {
+    const style = { color: "#0a84ff", size: 2 } as const;
+    expect(withStyle(fill, style, 1)).toEqual({ ...fill, color: "#0a84ff" });
+    expect(withStyle(highlight, style, 1)).toEqual({ ...highlight, color: "#0a84ff" });
+    expect(withStyle(blur, style, 1)).toBe(blur);
+  });
+
+  it("keeps the toolbar's own size (and for a blur, colour) when one is selected", () => {
+    const current = { color: "#34c759", size: 2 } as const;
+    expect(styleOf(fill, 1, current)).toEqual({ color: "#000000", size: 2 });
+    expect(styleOf(blur, 1, current)).toEqual(current);
+  });
+
+  it("dims only the style controls that do nothing for the tool", () => {
+    expect(styleControls("blur")).toEqual({ color: false, size: false });
+    expect(styleControls("fill")).toEqual({ color: true, size: false });
+    expect(styleControls("highlight")).toEqual({ color: true, size: false });
+    expect(styleControls("arrow")).toEqual({ color: true, size: true });
+    expect(styleControls("text")).toEqual({ color: true, size: true });
+  });
+
+  it("draws mosaics first, so nothing drawn on them is blurred", () => {
+    const order = drawOrder([fill, blur, highlight]).map((a) => a.id);
+    expect(order).toEqual([7, 5, 6]);
+  });
+
+  it("scales the mosaic block with the display, never below two pixels", () => {
+    expect(blockSize(1)).toBe(10);
+    expect(blockSize(2)).toBe(20);
+    expect(blockSize(0.01)).toBe(2);
   });
 });

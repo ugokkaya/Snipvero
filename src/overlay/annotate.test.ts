@@ -274,3 +274,67 @@ describe("rebase", () => {
     expect(run(moved, { type: "rebase", dx: 0, dy: 0 })).toBe(moved);
   });
 });
+
+describe("fill, blur and highlight tools", () => {
+  const draw = (t: Tool) => gesture(run(INITIAL_ANNOTATE, tool(t)), [150, 100], [50, 50]);
+
+  it.each([
+    ["fill", { kind: "fill", color: "#ff3b30" }],
+    ["highlight", { kind: "highlight", color: "#ff3b30" }],
+    ["blur", { kind: "blur", block: 10 }],
+  ] as const)("draws a %s rectangle in any drag direction and selects it", (t, expected) => {
+    const done = draw(t);
+    expect(present(done)).toMatchObject([
+      { ...expected, rect: { x: 50, y: 50, width: 100, height: 50 } },
+    ]);
+    expect(done.selected).toBe(1);
+  });
+
+  it("creates nothing for a click", () => {
+    const clicked = gesture(run(INITIAL_ANNOTATE, tool("blur")), [10, 20], [11, 21]);
+    expect(present(clicked)).toEqual([]);
+  });
+
+  it("uses the chosen colour for a fill and a highlight but never gives a blur one", () => {
+    const red = run(INITIAL_ANNOTATE, { type: "setColor", color: "#0a84ff" });
+    expect(present(gesture(run(red, tool("fill")), [0, 0], [50, 50]))[0]).toMatchObject({
+      color: "#0a84ff",
+    });
+    expect(present(gesture(run(red, tool("blur")), [0, 0], [50, 50]))[0]).not.toHaveProperty(
+      "color",
+    );
+  });
+
+  it("scales the block with the display", () => {
+    const retina = reduceAnnotate(run(INITIAL_ANNOTATE, tool("blur")), press(0, 0), {
+      ...ENV,
+      scale: 2,
+    });
+    const done = [drag(60, 60), release].reduce(
+      (s, a) => reduceAnnotate(s, a, { ...ENV, scale: 2 }),
+      retina,
+    );
+    expect(present(done)[0]).toMatchObject({ kind: "blur", block: 20 });
+  });
+
+  it("resizes from a handle, moves from the inside and undoes", () => {
+    const drawn = draw("blur");
+    // Drag the bottom-right corner (150, 100) by (+40, +30).
+    const resized = gesture(run(drawn, tool("select")), [150, 100], [190, 130]);
+    expect(present(resized)[0]).toMatchObject({ rect: { x: 50, y: 50, width: 140, height: 80 } });
+    // A solid area is grabbed in the middle, unlike an outlined rectangle.
+    const moved = gesture(resized, [100, 90], [110, 95]);
+    expect(present(moved)[0]).toMatchObject({ rect: { x: 60, y: 55 } });
+    expect(present(run(moved, { type: "undo" }, { type: "undo" }))[0]).toMatchObject({
+      rect: { x: 50, y: 50, width: 100, height: 50 },
+    });
+  });
+
+  it("keeps the toolbar's size when a fill is selected", () => {
+    const big = run(INITIAL_ANNOTATE, { type: "setSize", size: 2 });
+    const filled = gesture(run(big, tool("fill")), [0, 0], [50, 50]);
+    const picked = run(filled, tool("select"), { type: "deselect" }, press(25, 25), release);
+    expect(picked.selected).toBe(1);
+    expect(picked.style.size).toBe(2);
+  });
+});

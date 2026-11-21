@@ -71,16 +71,19 @@ the countdown text. The indicator stays on the selected display and hides before
 
 ### FR-4 / FR-5 details: toolbar and annotations
 
-| ID     | Requirement                                                                                                                                       |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR-4.1 | A compact toolbar appears below a finalized selection (above it, or inside a full-height one, when there is no room), clamped to its monitor.     |
-| FR-4.2 | Tools: Select/move (default), Arrow, Rectangle, Text; the active tool is highlighted. Six colours, three sizes, undo, redo, delete.               |
-| FR-5.1 | Arrow and outlined rectangle: drag to draw with a live preview; a click creates nothing. Colour and stroke width configurable.                    |
-| FR-5.2 | Text: click to type in a native text field (Unicode, Turkish). Escape or a click elsewhere finishes; empty text is dropped. Colour and font size. |
-| FR-5.3 | Annotations can be selected, moved and deleted; rectangles resized from eight handles; texts re-edited by clicking them.                          |
-| FR-5.4 | Annotations stay on the same screenshot pixels when the region is moved, resized or replaced; parts outside the region are hidden, not deleted.   |
-| FR-5.5 | Undo/redo (Cmd/Ctrl+Z, Shift+Cmd/Ctrl+Z, Ctrl+Y on Windows) and Delete/Backspace for the selected annotation.                                     |
-| FR-5.6 | Escape while editing text finishes the edit; otherwise it cancels the capture (FR-9).                                                             |
+| ID     | Requirement                                                                                                                                                                                                                                              |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-4.1 | A compact toolbar appears below a finalized selection (above it, or inside a full-height one, when there is no room), clamped to its monitor.                                                                                                            |
+| FR-4.2 | Tools: Select/move (default), Arrow, Rectangle, Text, Fill, Blur, Highlight; the active tool is highlighted. Six colours, three sizes, undo, redo, delete. Colour and size buttons the current tool or selection does not use are dimmed, never removed. |
+| FR-5.1 | Arrow and outlined rectangle: drag to draw with a live preview; a click creates nothing. Colour and stroke width configurable.                                                                                                                           |
+| FR-5.2 | Text: click to type in a native text field (Unicode, Turkish). Escape or a click elsewhere finishes; empty text is dropped. Colour and font size.                                                                                                        |
+| FR-5.3 | Annotations can be selected, moved and deleted; rectangles, fills, blurs and highlights resized from eight handles; texts re-edited by clicking them.                                                                                                    |
+| FR-5.4 | Annotations stay on the same screenshot pixels when the region is moved, resized or replaced; parts outside the region are hidden, not deleted.                                                                                                          |
+| FR-5.5 | Undo/redo (Cmd/Ctrl+Z, Shift+Cmd/Ctrl+Z, Ctrl+Y on Windows) and Delete/Backspace for the selected annotation.                                                                                                                                            |
+| FR-5.6 | Escape while editing text finishes the edit; otherwise it cancels the capture (FR-9).                                                                                                                                                                    |
+| FR-5.7 | Fill: drag a rectangle that covers the area with the chosen colour, opaque. Grabbed anywhere inside, unlike the outlined rectangle.                                                                                                                      |
+| FR-5.8 | Blur: drag a rectangle that turns the screenshot under it into mosaic blocks (ADR-037). Colour and size do not apply. Blocks keep their size when the area is resized. It is drawn under every other annotation and never alters them.                   |
+| FR-5.9 | Highlight: drag a rectangle that tints the area with the chosen colour at 40% opacity, so the screenshot stays readable.                                                                                                                                 |
 
 ### FR-6 / FR-7 details: export
 
@@ -109,6 +112,6 @@ the countdown text. The indicator stays on the selected display and hides before
 
 - Selection spanning multiple monitors
 - A settings window, themes (changing the capture shortcut is FR-15; Open at Login on macOS is FR-16)
-- Additional tools (blur, pen, highlighter, counters), upload/sharing of any kind
+- Additional tools (pen, counters, ellipse), upload/sharing of any kind
 - Automatic update checks (a possible later opt-in setting, ADR-028)
 - Linux support
