@@ -9,8 +9,8 @@ Moving it into the workflows directory and provisioning a runner require separat
 then, it needs `MACOS_SIGNING_ENABLED=true`; manual runs default to artifacts only (`publish=false`).
 No workflow creates certificates or changes repository settings.
 The existing `v0.1.0-beta.1` download remains the original ad-hoc build; do not replace its assets.
-`0.1.0-beta.2` to `0.1.0-beta.9` are published.
-The current source version is `0.2.0-beta.1` (build 10), not yet published: screen recording (video, audio, GIF) and the Turkish interface. The last published version is `0.1.0-beta.9` (build 9).
+`0.1.0-beta.2` to `0.1.0-beta.9` and `0.2.0-beta.1` are published.
+The current source version is `0.2.0-beta.1` (build 10), published as Latest (non-prerelease, like Beta 9) on November 21, 2026: screen recording (video, sound, GIF), the Fill/Blur/Highlight tools and the Turkish interface. PR #12 passed CI on macOS and Windows (after two Windows-only clippy errors were fixed in it); the merge tree `65f678d` equals the frozen build source. Both fresh Developer ID app and DMG submissions were Accepted by Apple and stapled; the full distribution/updater gate passed for the candidate and, with 128 checks, for the eight anonymously re-downloaded public assets, which are byte-identical to the candidate. Only afterward was the beta updater manifest updated. The maintainer reported recording, sound, GIF export, the mosaic tools and the Turkish interface working in a locally built app. Clean-Mac, Homebrew, macOS 14/15, mixed-DPI and denied-permission runtime QA remain unverified.
 The maintainer reported the tooltip fix working in the local development-signed build on
 November 15, 2026, and authorized publication. This does not establish exhaustive mixed-display
 or notarized-candidate runtime QA. Beta 8 added five-second region recapture with a blinking
@@ -106,8 +106,8 @@ Release. A pre-release version selects the beta update channel (§9).
 
 | Key                          | Value   | Set in                                                     |
 | ---------------------------- | ------- | ---------------------------------------------------------- |
-| `CFBundleShortVersionString` | `0.1.0` | `src-tauri/Info.plist` (overrides the bundler's value)     |
-| `CFBundleVersion`            | `9`     | `tauri.conf.json` → `bundle.macOS.bundleVersion` (a build) |
+| `CFBundleShortVersionString` | `0.2.0` | `src-tauri/Info.plist` (overrides the bundler's value)     |
+| `CFBundleVersion`            | `10`    | `tauri.conf.json` → `bundle.macOS.bundleVersion` (a build) |
 
 `CFBundleShortVersionString` is the package version without its pre-release suffix;
 `bundle_versions_follow_apple_format` (Rust test) fails if it differs or if either value is not in
