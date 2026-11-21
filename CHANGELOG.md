@@ -1,9 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.2.0-beta.1 (unreleased)
 
 ### Added
 
+- The interface is available in Turkish. It follows the system language, and the **Language** row in the main window
+  switches between System default, English and Türkçe without a restart. The menu bar, overlay, recording windows and
+  messages change with it. The macOS microphone permission text stays English.
 - macOS: record a region of one display as a silent MP4 (H.264, 30 fps). Start from **Record Region** in
   the menu bar or the main window, or from the record button of the screenshot toolbar; stop from the menu bar,
   the capture shortcut or the maximum length (five minutes by default). A review window plays the recording and offers

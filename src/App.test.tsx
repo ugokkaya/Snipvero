@@ -309,7 +309,7 @@ describe("Turkish", () => {
   it("shows the main window in Turkish", async () => {
     setLanguage("tr");
     await render();
-    expect(text()).toContain("Bölgeyi Yakala");
+    expect(text()).toContain("Alanı Yakala");
     expect(text()).toContain("Menü çubuğunda çalışır");
     expect(text()).toContain("Sürüm 9.8.7-test.1");
     expect(text()).not.toContain("Capture Region");

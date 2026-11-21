@@ -546,7 +546,7 @@ pub fn cap_from_setting(seconds: Option<u32>) -> Duration {
 /// The tray's recording row for a phase: its label and whether it can be clicked.
 pub fn menu_entry(phase: Phase) -> (&'static str, bool) {
     match phase {
-        Phase::Idle => (tr!("Record Region", "Bölge Kaydı Başlat"), true),
+        Phase::Idle => (tr!("Record Region", "Alan Kaydı Başlat"), true),
         Phase::Starting => (tr!("Starting Recording…", "Kayıt Başlıyor…"), false),
         Phase::Recording => (tr!("Stop Recording", "Kaydı Durdur"), true),
         Phase::Stopping => (tr!("Saving Recording…", "Kayıt Kaydediliyor…"), false),
@@ -636,12 +636,12 @@ fn region_message(error: RegionError) -> String {
         .into(),
         RegionError::TooSmall => tr!(
             "The region is too small to record. Select at least 16 × 16 pixels.",
-            "Bölge kaydedilemeyecek kadar küçük. En az 16 × 16 piksel seçin."
+            "Alan kaydedilemeyecek kadar küçük. En az 16 × 16 piksel seçin."
         )
         .into(),
         RegionError::TooLarge => tr!(
             "The region is too large to record as video. Select at most 8192 pixels per side and about 9.4 megapixels (for example 3840 × 2160).",
-            "Bölge video olarak kaydedilemeyecek kadar büyük. Kenar başına en fazla 8192 piksel ve yaklaşık 9,4 megapiksel seçin (örneğin 3840 × 2160)."
+            "Alan video olarak kaydedilemeyecek kadar büyük. Kenar başına en fazla 8192 piksel ve yaklaşık 9,4 megapiksel seçin (örneğin 3840 × 2160)."
         )
         .into(),
     }

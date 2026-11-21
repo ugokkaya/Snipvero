@@ -11,17 +11,17 @@ export const appTr: Record<keyof typeof appEn, string> = {
 
   "app.subtitle": "Ekran yakalama ve not ekleme",
   "app.capture.section": "Yakala",
-  "app.capture.button": "Bölgeyi Yakala",
+  "app.capture.button": "Alanı Yakala",
   "app.capture.shortcutLabel": "Kısayol {shortcut}",
   "app.capture.hint":
-    "Tüm ekranları dondurur. Bölge seçmek için sürükleyin, iptal etmek için {esc} tuşuna basın.",
-  "app.record.button": "Bölge Kaydı Başlat",
+    "Tüm ekranları dondurur. Alan seçmek için sürükleyin, iptal etmek için {esc} tuşuna basın.",
+  "app.record.button": "Alan Kaydı Başlat",
   "app.record.hint":
-    "Seçilen bölgeyi MP4 video olarak kaydeder. Menü çubuğundan{shortcut} durdurabilirsiniz.",
+    "Seçilen alanı MP4 video olarak kaydeder. Menü çubuğundan{shortcut} durdurabilirsiniz.",
   "app.record.orShortcut": " veya {shortcut} ile",
   "app.features.label": "Özellikler",
   "app.features.capture.title": "Yakala",
-  "app.features.capture.text": "Ekranın istediğiniz bölgesini seçin.",
+  "app.features.capture.text": "Ekranın istediğiniz alanını seçin.",
   "app.features.annotate.title": "Not Ekle",
   "app.features.annotate.text": "Ok, dikdörtgen ve metin ekleyin.",
   "app.features.export.title": "Dışa Aktar",
