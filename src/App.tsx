@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import appIcon from "../src-tauri/icons/128x128@2x.png";
 import { ExternalLink } from "./ExternalLink";
+import { LanguageRow } from "./LanguageRow";
 import {
   AnnotateIcon,
   CaptureIcon,
@@ -198,6 +199,8 @@ export function App() {
               onChange={shortcutChanged}
             />
           )}
+
+          <LanguageRow />
 
           <UpdatesRow current={info?.version} />
         </ul>

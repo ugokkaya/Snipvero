@@ -6,6 +6,8 @@ import type { AppInfo, AppStatus, AudioStatus } from "./ipc";
 
 const ipc = vi.hoisted(() => ({
   appInfo: vi.fn(),
+  languageGet: vi.fn(() => Promise.resolve({ language: "en", setting: null })),
+  languageSet: vi.fn(),
   appStatus: vi.fn(),
   startCapture: vi.fn(),
   startRecording: vi.fn(),

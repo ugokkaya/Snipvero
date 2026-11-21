@@ -12,6 +12,9 @@ pub const OVERLAY_SELECTION_CLEARED: &str = "overlay-selection-cleared";
 /// Sent to the main window by the menu bar's **Check for Updates…**: start an update check.
 pub const UPDATE_CHECK_REQUESTED: &str = "update-check-requested";
 
+/// Sent to every window with the new interface language (`"en"` or `"tr"`) when the user changes it.
+pub const LANGUAGE_CHANGED: &str = "language-changed";
+
 /// Sent to every window with the `RecordingStatus` on each state change of a recording (not per frame).
 pub const RECORDING_STATE: &str = "recording-state";
 

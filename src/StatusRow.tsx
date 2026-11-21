@@ -19,10 +19,12 @@ export function StatusRow(props: {
         <div className="status-line">
           <span className="status-title">{props.title}</span>
           <span className="status-aside">
-            <span className="status-value" data-tone={props.tone}>
-              <span className="status-dot" aria-hidden="true" />
-              {props.value}
-            </span>
+            {props.value && (
+              <span className="status-value" data-tone={props.tone}>
+                <span className="status-dot" aria-hidden="true" />
+                {props.value}
+              </span>
+            )}
             {props.aside}
           </span>
         </div>

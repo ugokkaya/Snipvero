@@ -1049,3 +1049,12 @@ a {
   text-align: center;
   color: var(--text-secondary);
 }
+
+.language-select {
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+}

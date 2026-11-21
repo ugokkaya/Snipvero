@@ -625,6 +625,13 @@ fn release_lock(app: &AppHandle) {
 }
 
 /// The tray's row and title, and the on-screen indicator, for the current phase.
+/// The recording's phase and elapsed time, for relabelling the tray after a language change.
+pub fn tray_phase(app: &AppHandle) -> (Phase, Duration) {
+    let state = app.state::<RecordingState>();
+    let machine = state.machine();
+    (machine.phase, machine.elapsed(Instant::now()))
+}
+
 fn refresh_ui(app: &AppHandle, id: u64) {
     let state = app.state::<RecordingState>();
     let (phase, elapsed) = {

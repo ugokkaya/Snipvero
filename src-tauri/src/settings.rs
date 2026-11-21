@@ -25,6 +25,9 @@ pub struct Settings {
     /// Record the microphone. Off by default; only turned on once the system allowed it.
     #[serde(default, skip_serializing_if = "is_false")]
     pub record_microphone: bool,
+    /// Interface language: `en` or `tr`; `None` follows the system (ADR-039).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
 }
 
 fn is_false(value: &bool) -> bool {
@@ -107,6 +110,7 @@ mod tests {
             recording_max_seconds: Some(60),
             record_system_audio: true,
             record_microphone: true,
+            language: Some("tr".into()),
         };
         write(&file, &settings).expect("write");
         assert_eq!(read(&file), Ok(settings));
