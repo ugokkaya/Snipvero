@@ -1,5 +1,6 @@
 // Recording a new capture shortcut in the main window (ADR-030). Rust validates and registers it;
 // this only turns a key press into an accelerator and words Rust's answer.
+import { t } from "./i18n";
 import type { ShortcutRejection } from "./ipc";
 import type { Platform } from "./platform";
 
@@ -50,18 +51,23 @@ export const isCancel = (press: KeyPress) =>
   press.code === "Escape" && !press.metaKey && !press.ctrlKey && !press.altKey && !press.shiftKey;
 
 export function rejectionMessage(rejection: ShortcutRejection, platform: Platform): string {
-  const example = platform === "macos" ? "⌘⇧ or ⌃⌥" : "Ctrl+Shift or Ctrl+Alt";
+  const example = t(
+    platform === "macos" ? "app.shortcut.example.macos" : "app.shortcut.example.other",
+  );
   switch (rejection) {
     case "modifiers":
-      return `Use two modifier keys, such as ${example}, so other apps keep their own shortcuts. With a function key (F1–F24), one is enough. Print Screen can be used on its own.${platform === "macos" ? " F13 is also allowed on its own, since some Mac keyboards report Print Screen as F13." : ""}`;
+      return (
+        t("app.shortcut.rejection.modifiers", { example }) +
+        (platform === "macos" ? t("app.shortcut.rejection.modifiersF13") : "")
+      );
     case "reserved":
-      return "The system or most apps use that combination. Choose another one.";
+      return t("app.shortcut.rejection.reserved");
     case "unavailable":
-      return "That combination could not be registered, probably because another app uses it.";
+      return t("app.shortcut.rejection.unavailable");
     case "notSaved":
-      return "The shortcut could not be saved. The previous shortcut still works.";
+      return t("app.shortcut.rejection.notSaved");
     case "notAllowed":
     case "invalid":
-      return "That key cannot be used in a shortcut. Choose another one.";
+      return t("app.shortcut.rejection.invalid");
   }
 }

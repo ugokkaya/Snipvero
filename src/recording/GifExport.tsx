@@ -8,11 +8,16 @@ import {
   type GifPlan,
   type RecordingStatus,
 } from "../ipc";
+import { t, useLanguage } from "../i18n";
 import { formatBytes } from "./format";
 import { formatEstimate, GIF_FPS_CHOICES, gifFileName, gifWidthChoices, percent } from "./gif";
 
 const errorMessage = (error: unknown) =>
-  typeof error === "string" ? error : error instanceof Error ? error.message : "Export failed.";
+  typeof error === "string"
+    ? error
+    : error instanceof Error
+      ? error.message
+      : t("recording.exportFailed");
 
 type Phase = "idle" | "choosing" | "running" | "cancelling";
 
@@ -33,6 +38,7 @@ export function GifExport({
   onBusy: (busy: boolean) => void;
   onClose: () => void;
 }) {
+  useLanguage();
   const [fps, setFps] = useState(status.gifDefaultFps);
   const [width, setWidth] = useState(status.gifDefaultWidth);
   const [plan, setPlan] = useState<{ plan: GifPlan } | { error: string } | null>(null);
@@ -77,13 +83,14 @@ export function GifExport({
       .then((done) => {
         if (done.outcome === "done") {
           setResult({
-            text: `GIF saved (${formatBytes(done.bytes)}, ${done.frames} ${
-              done.frames === 1 ? "frame" : "frames"
-            }).`,
+            text: t(done.frames === 1 ? "recording.gif.savedOne" : "recording.gif.savedMany", {
+              size: formatBytes(done.bytes),
+              frames: done.frames,
+            }),
             error: false,
           });
         } else if (cancelRequested.current) {
-          setResult({ text: "GIF export cancelled.", error: false });
+          setResult({ text: t("recording.gif.cancelled"), error: false });
         }
       })
       .catch((error: unknown) => setResult({ text: errorMessage(error), error: true }))
@@ -96,11 +103,11 @@ export function GifExport({
   const planned = plan && "plan" in plan ? plan.plan : null;
   const widths = gifWidthChoices(status.gifMaxWidth, status.gifDefaultWidth);
   return (
-    <section className="review-gif" aria-label="Export as GIF">
-      <h2>Export as GIF</h2>
+    <section className="review-gif" aria-label={t("recording.gif.title")}>
+      <h2>{t("recording.gif.title")}</h2>
       <div className="review-gif-row">
         <label>
-          Frame rate
+          {t("recording.gif.frameRate")}
           <select
             value={fps}
             disabled={working}
@@ -114,7 +121,7 @@ export function GifExport({
           </select>
         </label>
         <label>
-          Width
+          {t("recording.gif.width")}
           <select
             value={width}
             disabled={working}
@@ -144,13 +151,13 @@ export function GifExport({
             max={100}
             // Without a value while the save dialog is open: nothing is running yet.
             {...(phase === "choosing" ? {} : { value: percent(fraction) })}
-            aria-label="GIF export progress"
+            aria-label={t("recording.gif.progress")}
           />
           <span>
             {phase === "choosing"
-              ? "Choose where to save…"
+              ? t("recording.gif.choosing")
               : phase === "cancelling"
-                ? "Cancelling…"
+                ? t("recording.gif.cancelling")
                 : `${percent(fraction)} %`}
           </span>
         </div>
@@ -175,7 +182,7 @@ export function GifExport({
               void recordingCancelGifExport(id);
             }}
           >
-            Cancel export
+            {t("recording.gif.cancelExport")}
           </button>
         ) : (
           <>
@@ -185,10 +192,10 @@ export function GifExport({
               disabled={working || planned === null}
               onClick={exporting}
             >
-              Export…
+              {t("recording.gif.export")}
             </button>
             <button type="button" className="button" disabled={working} onClick={onClose}>
-              Close
+              {t("recording.gif.close")}
             </button>
           </>
         )}

@@ -3,10 +3,10 @@
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, path::BaseDirectory};
 
+use crate::i18n::tr;
 use crate::system;
 
 pub const LABEL: &str = "about";
-const TITLE: &str = "About Snipvero";
 const WIDTH: f64 = 360.0;
 const HEIGHT: f64 = 412.0;
 
@@ -24,7 +24,7 @@ pub fn show(app: &AppHandle) {
         return;
     }
     let window = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("index.html".into()))
-        .title(TITLE)
+        .title(tr!("About Snipvero", "Snipvero Hakkında"))
         .inner_size(WIDTH, HEIGHT)
         .resizable(false)
         .maximizable(false)
@@ -111,7 +111,10 @@ pub fn open(app: &AppHandle, link: Link) -> Result<(), String> {
             .map_err(|err| err.to_string())?;
         return system::open_file(&path);
     }
-    let url = web_url(REPOSITORY, link).ok_or("the project page is not an https address")?;
+    let url = web_url(REPOSITORY, link).ok_or(tr!(
+        "the project page is not an https address",
+        "proje sayfası bir https adresi değil"
+    ))?;
     system::open_url(&url)
 }
 

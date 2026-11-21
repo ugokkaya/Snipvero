@@ -25,6 +25,7 @@ import {
   type FrameInfo,
 } from "../ipc";
 import { detectPlatform } from "../platform";
+import { t, useLanguage } from "../i18n";
 import { canRedo, canUndo, displayedAnnotations, selectedAnnotation } from "./annotate";
 import { styleControls } from "./annotations";
 import { clientToPixel, pixelToClient, placeOutside, type Rect } from "./coords";
@@ -57,14 +58,17 @@ const loadRasterizer = () => import("./rasterize");
 /** For actions that do not depend on the frame (clear, cancel). */
 const NO_ENV: EditorEnv = editorEnv({ width: 1, height: 1 }, { width: 1, height: 1 }, () => 0);
 const TOOLBAR_GAP = 8;
-const MICROPHONE_NOTICE =
-  "The microphone is switched on, but Snipvero is not allowed to use it. Allow it in System Settings → Privacy & Security → Microphone, or record without it.";
 
 const PLATFORM = detectPlatform(navigator.userAgent);
-const KEYS =
+const keys = () =>
   PLATFORM === "macos"
-    ? { undo: "⌘Z", redo: "⇧⌘Z", copy: "⌘C or Enter", save: "⌘S" }
-    : { undo: "Ctrl+Z", redo: "Ctrl+Y", copy: "Ctrl+C or Enter", save: "Ctrl+S" };
+    ? { undo: "⌘Z", redo: "⇧⌘Z", copy: t("overlay.keys.copy", { key: "⌘C" }), save: "⌘S" }
+    : {
+        undo: "Ctrl+Z",
+        redo: "Ctrl+Y",
+        copy: t("overlay.keys.copy", { key: "Ctrl+C" }),
+        save: "Ctrl+S",
+      };
 
 const reducer = (state: EditorState, { action, env }: { action: EditorAction; env: EditorEnv }) =>
   reduceEditor(state, action, env);
@@ -79,6 +83,7 @@ const report = (session: number, region: Rect | null) =>
  * export. Everything but export runs in the page: no IPC while drawing. Escape cancels.
  */
 export function Overlay({ index }: { index: number }) {
+  useLanguage();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   // The frame canvas holds the native-resolution capture that mosaics are cut from. State, so the
   // annotation layer renders again once it exists.
@@ -284,7 +289,7 @@ export function Overlay({ index }: { index: number }) {
       // the user's, here, with the selection still on screen.
       if (error === MICROPHONE_UNAVAILABLE) {
         setMicrophoneOffer(true);
-        setNotice(MICROPHONE_NOTICE);
+        setNotice(t("overlay.microphoneNotice"));
       } else {
         setNotice(String(error));
       }
@@ -387,7 +392,7 @@ export function Overlay({ index }: { index: number }) {
           canRedo={canRedo(annotate)}
           canDelete={annotate.selected !== null && annotate.gesture === null}
           canExport={!exporting}
-          keys={KEYS}
+          keys={keys()}
           send={send}
           onExport={exportImage}
           onCaptureDelayed={captureDelayed}
@@ -399,7 +404,7 @@ export function Overlay({ index }: { index: number }) {
           {notice}
           {microphoneOffer && (
             <button type="button" className="overlay-offer" onClick={() => record(true)}>
-              Record without microphone
+              {t("overlay.recordWithoutMicrophone")}
             </button>
           )}
         </div>
@@ -407,9 +412,7 @@ export function Overlay({ index }: { index: number }) {
         info?.focused &&
         selection.phase === "idle" && (
           <div className="overlay-hud">
-            {info.mode === "record"
-              ? "Drag to select the area to record · Esc to cancel"
-              : "Drag to select · Esc to cancel"}
+            {t(info.mode === "record" ? "overlay.hint.record" : "overlay.hint.capture")}
           </div>
         )
       )}

@@ -1,5 +1,6 @@
 // Pure state of the About window's update section (ADR-028). Rust does the work; this only
 // decides what the user sees and which action a button starts.
+import { getLanguage, t } from "./i18n";
 import type { UpdateCheck, UpdateFailure, UpdateProgress } from "./ipc";
 
 export interface Release {
@@ -87,31 +88,32 @@ export const retryAction = (view: UpdateView): "install" | "check" | null => {
 export function failureMessage(failure: UpdateFailure): string {
   switch (failure) {
     case "unavailable":
-      return "Updates are not available in this build.";
+      return t("app.update.failure.unavailable");
     case "network":
-      return "Snipvero could not reach the update server. Check your internet connection and try again.";
+      return t("app.update.failure.network");
     case "manifest":
-      return "The update information could not be read.";
+      return t("app.update.failure.manifest");
     case "noBuild":
-      return "This update is not available for your Mac.";
+      return t("app.update.failure.noBuild");
     case "verification":
-      return "The update could not be verified, so it was not installed.";
+      return t("app.update.failure.verification");
     case "location":
-      return "Move Snipvero to the Applications folder, open it from there, and try again.";
+      return t("app.update.failure.location");
     case "busy":
-      return "Finish or cancel the current capture, then try again.";
+      return t("app.update.failure.busy");
     case "install":
-      return "The update could not be installed.";
+      return t("app.update.failure.install");
     case "cancelled":
-      return "The download was cancelled.";
+      return t("app.update.failure.cancelled");
     case "inProgress":
-      return "An update is already being downloaded in another Snipvero window.";
+      return t("app.update.failure.inProgress");
     case "failed":
-      return "Something went wrong while updating.";
+      return t("app.update.failure.failed");
   }
 }
 
 export function formatBytes(bytes: number): string {
   if (bytes < 1000 * 1000) return `${Math.round(bytes / 1000)} KB`;
-  return `${(bytes / (1000 * 1000)).toFixed(1)} MB`;
+  const megabytes = (bytes / (1000 * 1000)).toFixed(1);
+  return `${getLanguage() === "tr" ? megabytes.replace(".", ",") : megabytes} MB`;
 }

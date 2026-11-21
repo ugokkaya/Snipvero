@@ -17,6 +17,7 @@ use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 use crate::capture::Frame;
 use crate::events;
 use crate::geometry::PixelRect;
+use crate::i18n::tr;
 use crate::overlay::{self, CaptureState};
 
 #[cfg(target_os = "macos")]
@@ -248,7 +249,11 @@ fn copy_to_clipboard(image: &Image) -> Result<(), String> {
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = image;
-        Err("the clipboard is not supported on this platform".into())
+        Err(tr!(
+            "the clipboard is not supported on this platform",
+            "pano bu platformda desteklenmiyor"
+        )
+        .into())
     }
 }
 
@@ -361,7 +366,12 @@ pub async fn overlay_copy(
             eprintln!("[export] copied {}×{} px", image.width, image.height);
             Ok(ExportOutcome::Done)
         })
-        .map_err(|e| format!("Could not copy the screenshot: {e}"));
+        .map_err(|e| {
+            tr!(
+                format!("Could not copy the screenshot: {e}"),
+                format!("Ekran görüntüsü kopyalanamadı: {e}")
+            )
+        });
     finish(&app, job.session, &result);
     result
 }
@@ -446,7 +456,12 @@ async fn save(
         return Ok(ExportOutcome::Cancelled);
     };
     let png = encode_png(&image, png::Compression::Balanced)?;
-    write_replacing(&path, &png).map_err(|e| format!("Could not save {}: {e}", path.display()))?;
+    write_replacing(&path, &png).map_err(|e| {
+        tr!(
+            format!("Could not save {}: {e}", path.display()),
+            format!("{} kaydedilemedi: {e}", path.display())
+        )
+    })?;
     eprintln!(
         "[export] saved {}×{} px to {}",
         image.width,
@@ -465,9 +480,9 @@ async fn choose_path(
     name: String,
 ) -> Result<Option<PathBuf>, String> {
     let dialog = rfd::FileDialog::new()
-        .set_title("Save screenshot")
+        .set_title(tr!("Save screenshot", "Ekran görüntüsünü kaydet"))
         .set_file_name(name)
-        .add_filter("PNG image", &["png"])
+        .add_filter(tr!("PNG image", "PNG görüntüsü"), &["png"])
         .set_parent(window);
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {

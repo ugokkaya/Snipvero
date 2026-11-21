@@ -25,6 +25,7 @@ use objc2_core_video::{
 use objc2_foundation::{NSDictionary, NSString, NSURL};
 
 use super::{error_text, number};
+use crate::i18n::tr;
 use crate::recording::gif::{Picture, ReadError};
 
 /// Calls `on_picture` for every picture of the video track of `path`, in presentation order. Stops
@@ -36,22 +37,31 @@ pub fn read_pictures(
     on_picture: &mut dyn FnMut(Picture<'_>) -> Result<(), String>,
 ) -> Result<(), ReadError> {
     let failed = |reason: &str| ReadError::Failed(reason.to_string());
-    let url = NSURL::fileURLWithPath(&NSString::from_str(
-        path.to_str()
-            .ok_or_else(|| failed("the recording path is not valid UTF-8"))?,
-    ));
+    let url = NSURL::fileURLWithPath(&NSString::from_str(path.to_str().ok_or_else(|| {
+        failed(tr!(
+            "the recording path is not valid UTF-8",
+            "kayıt yolu geçerli UTF-8 değil"
+        ))
+    })?));
     // SAFETY: a fresh asset of a local file.
     let asset = unsafe { AVURLAsset::URLAssetWithURL_options(&url, None) };
     // SAFETY: an immutable framework constant.
-    let video =
-        unsafe { AVMediaTypeVideo }.ok_or_else(|| failed("AVFoundation has no video type"))?;
+    let video = unsafe { AVMediaTypeVideo }.ok_or_else(|| {
+        failed(tr!(
+            "AVFoundation has no video type",
+            "AVFoundation'da video türü yok"
+        ))
+    })?;
     // The asynchronous loader needs a run loop; a local, finished file is ready at once.
     #[allow(deprecated)]
     // SAFETY: a plain query of the asset.
     let tracks = unsafe { asset.tracksWithMediaType(video) };
-    let track = tracks
-        .firstObject()
-        .ok_or_else(|| failed("the recording has no video track"))?;
+    let track = tracks.firstObject().ok_or_else(|| {
+        failed(tr!(
+            "the recording has no video track",
+            "kaydın video izi yok"
+        ))
+    })?;
 
     // SAFETY: a fresh reader on the asset above.
     let reader = unsafe { AVAssetReader::assetReaderWithAsset_error(&asset) }
@@ -73,12 +83,15 @@ pub fn read_pictures(
         // The pictures are only read, never kept: no copy needed.
         output.setAlwaysCopiesSampleData(false);
         if !reader.canAddOutput(&output) {
-            return Err(failed("the recording cannot be decoded to pictures"));
+            return Err(failed(tr!(
+                "the recording cannot be decoded to pictures",
+                "kayıt görüntülere çözülemiyor"
+            )));
         }
         reader.addOutput(&output);
         if !reader.startReading() {
             return Err(ReadError::Failed(reader.error().map_or_else(
-                || "the recording could not be opened".to_string(),
+                || tr!("the recording could not be opened", "kayıt açılamadı").to_string(),
                 |error| error_text(&error),
             )));
         }
@@ -102,20 +115,29 @@ pub fn read_pictures(
                 return Ok(true); // Not a picture (no pixel data); skip it.
             };
             if CVPixelBufferGetPixelFormatType(&buffer) != kCVPixelFormatType_32BGRA {
-                return Err(failed("the decoder did not deliver BGRA pictures"));
+                return Err(failed(tr!(
+                    "the decoder did not deliver BGRA pictures",
+                    "kod çözücü BGRA görüntüleri iletmedi"
+                )));
             }
             // SAFETY: balanced by the unlock below, on every path.
             if unsafe { CVPixelBufferLockBaseAddress(&buffer, CVPixelBufferLockFlags::ReadOnly) }
                 != kCVReturnSuccess
             {
-                return Err(failed("a picture could not be read from the decoder"));
+                return Err(failed(tr!(
+                    "a picture could not be read from the decoder",
+                    "kod çözücüden bir görüntü okunamadı"
+                )));
             }
             let width = CVPixelBufferGetWidth(&buffer);
             let height = CVPixelBufferGetHeight(&buffer);
             let stride = CVPixelBufferGetBytesPerRow(&buffer);
             let base = CVPixelBufferGetBaseAddress(&buffer).cast::<u8>();
             let result = if base.is_null() || width == 0 || height == 0 || stride < width * 4 {
-                Err(failed("a picture of the video is empty"))
+                Err(failed(tr!(
+                    "a picture of the video is empty",
+                    "videonun bir karesi boş"
+                )))
             } else {
                 // SAFETY: the buffer is locked, so `base` points at `height` rows of `stride`
                 // bytes until the unlock; the slice does not outlive the callback.
@@ -153,7 +175,7 @@ impl ReaderError for AVAssetReader {
     fn error_text(&self) -> String {
         // SAFETY: a plain property read.
         unsafe { self.error() }.map_or_else(
-            || "the recording could not be decoded".to_string(),
+            || tr!("the recording could not be decoded", "kayıt çözülemedi").to_string(),
             |error| error_text(&error),
         )
     }

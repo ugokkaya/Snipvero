@@ -1,2 +1,31 @@
 // English messages of the overlay views (ADR-039). Keys are `overlay.<thing>`; `{name}` is a parameter.
-export const overlayEn = {} as const;
+export const overlayEn = {
+  "overlay.tool.select": "Select and move",
+  "overlay.tool.arrow": "Arrow",
+  "overlay.tool.rect": "Rectangle",
+  "overlay.tool.text": "Text",
+  "overlay.tool.fill": "Fill (cover an area)",
+  "overlay.tool.blur": "Blur (pixelate an area)",
+  "overlay.tool.highlight": "Highlight",
+  "overlay.size.small": "Small stroke and text",
+  "overlay.size.medium": "Medium stroke and text",
+  "overlay.size.large": "Large stroke and text",
+  "overlay.color": "Color {color}",
+  "overlay.undo": "Undo ({key})",
+  "overlay.redo": "Redo ({key})",
+  "overlay.delete": "Delete selected annotation (Delete)",
+  "overlay.delayed": "Capture this region again in 5 seconds (clears annotations)",
+  "overlay.copy": "Copy to clipboard ({key})",
+  "overlay.save": "Save as PNG ({key})",
+  "overlay.record.tooltip": "Record this region as video (annotations are not recorded)",
+  "overlay.record.label": "Record this region as video",
+  "overlay.record.button": "Record",
+  "overlay.keys.copy": "{key} or Enter",
+  "overlay.microphoneNotice":
+    "The microphone is switched on, but Snipvero is not allowed to use it. Allow it in System Settings → Privacy & Security → Microphone, or record without it.",
+  "overlay.recordWithoutMicrophone": "Record without microphone",
+  "overlay.hint.record": "Drag to select the area to record · Esc to cancel",
+  "overlay.hint.capture": "Drag to select · Esc to cancel",
+  "overlay.textEditor": "Annotation text",
+  "overlay.exportFailed": "Export failed.",
+} as const;

@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
+use crate::i18n::tr;
+
 const FILE_NAME: &str = "settings.json";
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -38,7 +40,12 @@ fn path(app: &AppHandle) -> Result<PathBuf, String> {
     app.path()
         .app_config_dir()
         .map(|dir| dir.join(FILE_NAME))
-        .map_err(|e| format!("no settings directory: {e}"))
+        .map_err(|e| {
+            tr!(
+                format!("no settings directory: {e}"),
+                format!("ayarlar klasörü yok: {e}")
+            )
+        })
 }
 
 /// The stored settings, or defaults when there are none or they cannot be read.
@@ -68,8 +75,16 @@ fn read(path: &Path) -> Result<Settings, String> {
 /// Writes a temporary file next to `path` and renames it over, so a crash or a full disk never
 /// leaves a half-written file behind.
 fn write(path: &Path, settings: &Settings) -> Result<(), String> {
-    let dir = path.parent().ok_or("settings path has no directory")?;
-    fs::create_dir_all(dir).map_err(|e| format!("{} could not be created: {e}", dir.display()))?;
+    let dir = path.parent().ok_or(tr!(
+        "settings path has no directory",
+        "ayarlar yolunda klasör yok"
+    ))?;
+    fs::create_dir_all(dir).map_err(|e| {
+        tr!(
+            format!("{} could not be created: {e}", dir.display()),
+            format!("{} oluşturulamadı: {e}", dir.display())
+        )
+    })?;
     let mut json = serde_json::to_vec_pretty(settings).map_err(|e| e.to_string())?;
     json.push(b'\n');
     let temporary = path.with_extension("json.tmp");
@@ -77,7 +92,10 @@ fn write(path: &Path, settings: &Settings) -> Result<(), String> {
         .and_then(|()| fs::rename(&temporary, path))
         .map_err(|e| {
             let _ = fs::remove_file(&temporary);
-            format!("{} could not be written: {e}", path.display())
+            tr!(
+                format!("{} could not be written: {e}", path.display()),
+                format!("{} yazılamadı: {e}", path.display())
+            )
         })
 }
 

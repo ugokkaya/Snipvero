@@ -23,6 +23,7 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, Webvi
 use crate::capture::{self, Frame};
 use crate::events;
 use crate::geometry::{LogicalRect, PixelRect};
+use crate::i18n::tr;
 use crate::system::{self, AppId};
 use crate::transfer;
 
@@ -103,7 +104,7 @@ impl Session {
         previous_app: Option<AppId>,
     ) -> Result<Self, String> {
         if frames.is_empty() {
-            return Err("no display could be captured".into());
+            return Err(tr!("no display could be captured", "hiçbir ekran yakalanamadı").into());
         }
         Ok(Session {
             id,
@@ -369,7 +370,12 @@ pub fn start_with_mode(app: &AppHandle, mode: Mode) {
                 let focus = cursor_display(&frames);
                 Session::new(id, frames, started, focus, previous_app)
                     .map(|session| Session { mode, ..session })
-                    .map_err(|err| format!("Screen capture failed: {err}"))
+                    .map_err(|err| {
+                        tr!(
+                            format!("Screen capture failed: {err}"),
+                            format!("Ekran yakalama başarısız oldu: {err}")
+                        )
+                    })
             });
         let count = match session {
             Ok(session) => {
@@ -402,7 +408,10 @@ pub fn start_with_mode(app: &AppHandle, mode: Mode) {
                 return close_on_main_thread(
                     &app,
                     id,
-                    Some(format!("could not open overlay: {err}")),
+                    Some(tr!(
+                        format!("could not open overlay: {err}"),
+                        format!("yakalama katmanı açılamadı: {err}")
+                    )),
                 );
             }
         }
@@ -490,7 +499,13 @@ fn watch_readiness(app: &AppHandle, session: u64) {
             close_on_main_thread(
                 &app,
                 session,
-                Some("The capture overlays did not appear. Please try again.".into()),
+                Some(
+                    tr!(
+                        "The capture overlays did not appear. Please try again.",
+                        "Yakalama katmanları görünmedi. Lütfen yeniden deneyin."
+                    )
+                    .into(),
+                ),
             );
         }
     });
@@ -542,7 +557,10 @@ fn displays_changed(app: &AppHandle, current: Option<Vec<LogicalRect>>) {
     if close(app, session) {
         fail(
             app,
-            "The displays changed during the capture. Please take the screenshot again.",
+            tr!(
+                "The displays changed during the capture. Please take the screenshot again.",
+                "Yakalama sırasında ekranlar değişti. Lütfen ekran görüntüsünü yeniden alın."
+            ),
         );
     }
 }
@@ -652,7 +670,7 @@ pub fn index_from_label(label: &str) -> Option<usize> {
 
 fn create_window(app: &AppHandle, index: usize) -> tauri::Result<()> {
     WebviewWindowBuilder::new(app, label(index), WebviewUrl::App("index.html".into()))
-        .title("Snipvero capture")
+        .title(tr!("Snipvero capture", "Snipvero yakalama"))
         .decorations(false)
         .resizable(false)
         .shadow(false)

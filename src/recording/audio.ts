@@ -1,4 +1,5 @@
 import type { AudioStatus } from "../ipc";
+import { t } from "../i18n";
 
 /** What the main window shows for the microphone, from the stored choice and the permission. */
 export interface MicrophoneView {
@@ -30,8 +31,8 @@ export function microphoneView(audio: AudioStatus): MicrophoneView {
 
 /** The review window's one-line description of a recording's sound. */
 export function soundLabel(systemAudio: boolean, microphone: boolean): string {
-  if (systemAudio && microphone) return "System audio and microphone";
-  if (systemAudio) return "System audio";
-  if (microphone) return "Microphone";
-  return "None";
+  if (systemAudio && microphone) return t("recording.audio.both");
+  if (systemAudio) return t("recording.audio.system");
+  if (microphone) return t("recording.audio.microphone");
+  return t("recording.audio.none");
 }

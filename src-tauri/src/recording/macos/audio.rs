@@ -42,6 +42,7 @@ use super::super::mixer::{
 };
 use super::super::{MicrophoneAccess, RecordingError};
 use super::{error_text, number};
+use crate::i18n::tr;
 
 /// The AAC track: 48 kHz stereo at 128 kbit/s (ADR-037).
 const AAC_BITRATE: u32 = 128_000;
@@ -218,7 +219,7 @@ impl Pipeline {
                 .fetch_add(block.frames() as u64, Ordering::Relaxed);
             Ok(true)
         } else {
-            Err("the audio encoder stopped".into())
+            Err(tr!("the audio encoder stopped", "ses kodlayıcı durdu").into())
         }
     }
 
@@ -251,23 +252,39 @@ impl Pipeline {
                 continue;
             }
             let label = match source {
-                Source::System => "System audio",
-                Source::Microphone => "Microphone audio",
+                Source::System => tr!("System audio", "Sistem sesi"),
+                Source::Microphone => tr!("Microphone audio", "Mikrofon sesi"),
             };
             if let Some(problem) = &track.problem {
-                notices.push(format!("{label} stopped being recorded: {problem}."));
+                notices.push(tr!(
+                    format!("{label} stopped being recorded: {problem}."),
+                    format!("{label} kaydı durdu: {problem}.")
+                ));
             } else if track.buffers == 0 {
                 notices.push(match source {
-                    Source::System => "No system audio was received, so that part of the sound is missing.".into(),
-                    Source::Microphone => "No microphone audio was received, so the recording has no microphone sound. \
-                         Check Snipvero's access under System Settings → Privacy & Security → Microphone.".into(),
+                    Source::System => tr!(
+                        "No system audio was received, so that part of the sound is missing.",
+                        "Sistem sesi alınamadı, bu nedenle sesin o kısmı eksik."
+                    )
+                    .into(),
+                    Source::Microphone => tr!(
+                        "No microphone audio was received, so the recording has no microphone sound. \
+                         Check Snipvero's access under System Settings → Privacy & Security → Microphone.",
+                        "Mikrofon sesi alınamadı, bu nedenle kayıtta mikrofon sesi yok. \
+                         Sistem Ayarları → Gizlilik ve Güvenlik → Mikrofon bölümünde Snipvero'nun erişimini kontrol edin."
+                    )
+                    .into(),
                 });
             }
         }
         let dropped = self.dropped.load(Ordering::Relaxed);
         if dropped > u64::from(SAMPLE_RATE) / 2 {
             notices.push(
-                "The sound has short gaps: the computer was too busy to encode all of it.".into(),
+                tr!(
+                    "The sound has short gaps: the computer was too busy to encode all of it.",
+                    "Seste kısa kesintiler var: bilgisayar sesin tamamını kodlayamayacak kadar meşguldü."
+                )
+                .into(),
             );
         }
         notices
@@ -554,7 +571,11 @@ impl Microphone {
         let device =
             unsafe { AVCaptureDevice::defaultDeviceWithMediaType(media) }.ok_or_else(|| {
                 RecordingError::Refused(
-                    "No microphone was found. Connect one, or turn the microphone off.".into(),
+                    tr!(
+                        "No microphone was found. Connect one, or turn the microphone off.",
+                        "Mikrofon bulunamadı. Bir mikrofon bağlayın veya mikrofonu kapatın."
+                    )
+                    .into(),
                 )
             })?;
         // SAFETY: a fresh input for an existing device.
@@ -572,7 +593,11 @@ impl Microphone {
         unsafe {
             if !session.canAddInput(&input) || !session.canAddOutput(&output) {
                 return Err(RecordingError::Failed(
-                    "the microphone cannot be used by the recorder".into(),
+                    tr!(
+                        "the microphone cannot be used by the recorder",
+                        "mikrofon kaydedici tarafından kullanılamıyor"
+                    )
+                    .into(),
                 ));
             }
             session.addInput(&input);
@@ -588,7 +613,11 @@ impl Microphone {
         // SAFETY: a plain property read.
         if !unsafe { session.isRunning() } {
             return Err(RecordingError::Failed(
-                "the microphone did not start. Check Snipvero's access under System Settings → Privacy & Security → Microphone.".into(),
+                tr!(
+                    "the microphone did not start. Check Snipvero's access under System Settings → Privacy & Security → Microphone.",
+                    "mikrofon başlatılamadı. Sistem Ayarları → Gizlilik ve Güvenlik → Mikrofon bölümünde Snipvero'nun erişimini kontrol edin."
+                )
+                .into(),
             ));
         }
         Ok(Microphone {
@@ -620,7 +649,11 @@ fn observe_runtime_errors(
     let handler = RcBlock::new(move |_notification: NonNull<NSNotification>| {
         pipeline.note_problem(
             Source::Microphone,
-            "the microphone stopped (it was unplugged or its access was turned off)".into(),
+            tr!(
+                "the microphone stopped (it was unplugged or its access was turned off)",
+                "mikrofon durdu (bağlantısı kesildi veya erişimi kapatıldı)"
+            )
+            .into(),
         );
     });
     // SAFETY: the block is copied by the framework; the notification name is a framework constant.

@@ -1,4 +1,5 @@
 // Pure helpers for the GIF export panel of the review window (ADR-037, task 4).
+import { t } from "../i18n";
 import { formatBytes } from "./format";
 
 /**
@@ -15,7 +16,7 @@ export function gifWidthChoices(maxWidth: number, defaultWidth: number): number[
 
 /** The estimate as the panel words it: it is an upper-ish guess, not a promise. */
 export function formatEstimate(bytes: number): string {
-  return `up to about ${formatBytes(bytes)}`;
+  return t("recording.gif.estimate", { size: formatBytes(bytes) });
 }
 
 /** Suggested file name in local time, for example `Snipvero-2026-10-30-143000.gif`. */

@@ -1,9 +1,12 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
+import { setLanguage } from "../i18n";
 import { Toolbar } from "./Toolbar";
 import { INITIAL_EDITOR } from "./editor";
+
+afterEach(() => setLanguage("en"));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -206,6 +209,45 @@ it("offers recording in the capture toolbar and alone in the record-only toolbar
     // Disabled while another action (a recording starting) runs, so it cannot start twice.
     render("record", false);
     expect(container.querySelector("button")?.disabled).toBe(true);
+  } finally {
+    act(() => root.unmount());
+    container.remove();
+  }
+});
+
+it("shows Turkish labels and tooltips with the shortcut keys in place", () => {
+  setLanguage("tr");
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      <Toolbar
+        position={{ x: 0, y: 0 }}
+        mode="capture"
+        tool="select"
+        style={INITIAL_EDITOR.annotate.style}
+        controls={{ color: true, size: true }}
+        canUndo={true}
+        canRedo={false}
+        canDelete={false}
+        canExport={true}
+        keys={{ undo: "⌘Z", redo: "⇧⌘Z", copy: "⌘C veya Enter", save: "⌘S" }}
+        send={vi.fn()}
+        onExport={vi.fn()}
+        onCaptureDelayed={vi.fn()}
+        onRecord={vi.fn()}
+      />,
+    ),
+  );
+  try {
+    const labels = [...container.querySelectorAll("button")].map((b) =>
+      b.getAttribute("aria-label"),
+    );
+    expect(labels).toContain("Dikdörtgen");
+    expect(labels).toContain("Geri Al (⌘Z)");
+    expect(labels).toContain("Panoya kopyala (⌘C veya Enter)");
+    expect(labels).toContain("Renk #ff3b30");
   } finally {
     act(() => root.unmount());
     container.remove();

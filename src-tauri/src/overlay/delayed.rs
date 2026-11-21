@@ -67,7 +67,10 @@ impl Session {
         let index = frames
             .iter()
             .position(|f| f.display_id == old.display_id)
-            .ok_or("The selected display was disconnected. Please capture again.")?;
+            .ok_or(tr!(
+                "The selected display was disconnected. Please capture again.",
+                "Seçilen ekranın bağlantısı kesildi. Lütfen yeniden yakalayın."
+            ))?;
         let frame = &frames[index];
         let captured: Vec<_> = self.frames.iter().map(|f| f.bounds).collect();
         let current: Vec<_> = frames.iter().map(|f| f.bounds).collect();
@@ -77,7 +80,11 @@ impl Session {
             || frame.height != old.height
             || frame.scale != old.scale
         {
-            return Err("The displays changed. Please take the screenshot again.".into());
+            return Err(tr!(
+                "The displays changed. Please take the screenshot again.",
+                "Ekranlar değişti. Lütfen ekran görüntüsünü yeniden alın."
+            )
+            .into());
         }
         let mut next = Session::new(id, frames, Instant::now(), index, self.previous_app)?;
         next.select(index, selection.region)?;
@@ -111,7 +118,10 @@ pub fn overlay_capture_delayed(
             close(&app, session);
             fail(
                 &app,
-                "Could not hide the capture overlays. Please try again.",
+                tr!(
+                    "Could not hide the capture overlays. Please try again.",
+                    "Yakalama katmanları gizlenemedi. Lütfen yeniden deneyin."
+                ),
             );
             return Err(err.to_string());
         }

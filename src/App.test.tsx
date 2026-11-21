@@ -2,6 +2,7 @@
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { setLanguage } from "./i18n";
 import type { AppInfo, AppStatus, AudioStatus } from "./ipc";
 
 const ipc = vi.hoisted(() => ({
@@ -94,6 +95,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  setLanguage("en");
   act(() => root.unmount());
   container.remove();
 });
@@ -300,5 +302,16 @@ describe("main window", () => {
     expect(link?.textContent).toBe("snipvero.app");
     expect(await click(link as Element)).toBe(false);
     expect(ipc.openLink).toHaveBeenCalledWith("website");
+  });
+});
+
+describe("Turkish", () => {
+  it("shows the main window in Turkish", async () => {
+    setLanguage("tr");
+    await render();
+    expect(text()).toContain("Bölgeyi Yakala");
+    expect(text()).toContain("Menü çubuğunda çalışır");
+    expect(text()).toContain("Sürüm 9.8.7-test.1");
+    expect(text()).not.toContain("Capture Region");
   });
 });

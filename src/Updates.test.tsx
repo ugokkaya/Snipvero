@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UpdateCheck, UpdateProgress } from "./ipc";
-import { PRIVACY_NOTE, RESTART_NOTE, Updates, UpdatesRow } from "./Updates";
+import { privacyNote, restartNote, Updates, UpdatesRow } from "./Updates";
 
 const ipc = vi.hoisted(() => ({
   checkForUpdate: vi.fn<() => Promise<UpdateCheck>>(),
@@ -60,7 +60,7 @@ describe("Check for Updates", () => {
   it("makes no request until the user clicks, and says what a check sends", () => {
     expect(ipc.checkForUpdate).not.toHaveBeenCalled();
     expect(ipc.installUpdate).not.toHaveBeenCalled();
-    expect(text()).toContain(PRIVACY_NOTE);
+    expect(text()).toContain(privacyNote());
   });
 
   it("reports an up-to-date version", async () => {
@@ -77,7 +77,7 @@ describe("Check for Updates", () => {
     const notes = container.querySelector(".update-notes");
     expect(notes?.textContent).toBe("Fixes.\n<b>not markup</b>");
     expect(notes?.querySelector("b")).toBeNull();
-    expect(text()).toContain(RESTART_NOTE);
+    expect(text()).toContain(restartNote());
     // Finding an update installs nothing by itself.
     expect(ipc.installUpdate).not.toHaveBeenCalled();
   });
@@ -170,7 +170,7 @@ describe("Updates row in the main window", () => {
 
   it("offers the check next to its title and requests nothing on its own", () => {
     expect(container.querySelector(".status-line button")?.textContent).toBe("Check for Updates…");
-    expect(text()).toContain(PRIVACY_NOTE);
+    expect(text()).toContain(privacyNote());
     expect(ipc.checkForUpdate).not.toHaveBeenCalled();
   });
 

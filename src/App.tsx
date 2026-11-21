@@ -24,7 +24,9 @@ import {
   type AppStatus,
   type ShortcutStatus,
 } from "./ipc";
-import { detectPlatform, shortcutLabel } from "./platform";
+import { t, useLanguage } from "./i18n";
+import { detectPlatform, shortcutLabel, type Tray } from "./platform";
+import { richMessage } from "./richMessage";
 import { RecordingAudio } from "./recording/RecordingAudio";
 import { ShortcutRow } from "./ShortcutRow";
 import { StatusRow, type Tone } from "./StatusRow";
@@ -33,15 +35,32 @@ import { useAppInfo } from "./useAppInfo";
 import { useFitWindow } from "./useFitWindow";
 
 const platform = detectPlatform(navigator.userAgent);
-const trayName = platform === "macos" ? "menu bar" : "system tray";
+const tray: Tray = platform === "macos" ? "menuBar" : "systemTray";
 
-const FEATURES = [
-  { title: "Capture", text: "Select any screen region.", icon: <CaptureIcon /> },
-  { title: "Annotate", text: "Add arrows, rectangles, and text.", icon: <AnnotateIcon /> },
-  { title: "Export", text: "Copy to clipboard or save as PNG.", icon: <ExportIcon /> },
-] as const;
+const features = () =>
+  [
+    {
+      id: "capture",
+      title: t("app.features.capture.title"),
+      text: t("app.features.capture.text"),
+      icon: <CaptureIcon />,
+    },
+    {
+      id: "annotate",
+      title: t("app.features.annotate.title"),
+      text: t("app.features.annotate.text"),
+      icon: <AnnotateIcon />,
+    },
+    {
+      id: "export",
+      title: t("app.features.export.title"),
+      text: t("app.features.export.text"),
+      icon: <ExportIcon />,
+    },
+  ] as const;
 
 export function App() {
+  useLanguage();
   const info = useAppInfo();
   const [status, setStatus] = useState<AppStatus | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
@@ -88,10 +107,12 @@ export function App() {
   };
 
   let permission: { value: string; tone: Tone };
-  if (!status) permission = { value: "Checking…", tone: "neutral" };
-  else if (!status.captureSupported) permission = { value: "Not available", tone: "neutral" };
-  else if (status.screenRecordingAllowed) permission = { value: "Allowed", tone: "ok" };
-  else permission = { value: "Not allowed", tone: "warning" };
+  if (!status) permission = { value: t("app.permission.checking"), tone: "neutral" };
+  else if (!status.captureSupported)
+    permission = { value: t("app.permission.notAvailable"), tone: "neutral" };
+  else if (status.screenRecordingAllowed)
+    permission = { value: t("app.permission.allowed"), tone: "ok" };
+  else permission = { value: t("app.permission.notAllowed"), tone: "warning" };
 
   return (
     <div className="window" ref={layout}>
@@ -99,13 +120,13 @@ export function App() {
         <img className="header-icon" src={appIcon} alt="" width={44} height={44} />
         <div className="header-text">
           <h1>Snipvero</h1>
-          <p className="subtitle">Screen capture &amp; annotation</p>
+          <p className="subtitle">{t("app.subtitle")}</p>
         </div>
         {info && <span className="badge">v{info.version}</span>}
       </header>
 
       <main className="content">
-        <section className="primary" aria-label="Capture">
+        <section className="primary" aria-label={t("app.capture.section")}>
           <button
             type="button"
             className="capture-button"
@@ -113,16 +134,17 @@ export function App() {
             disabled={status !== null && !captureSupported}
           >
             <CaptureIcon size={18} />
-            <span className="capture-label">Capture Region</span>
+            <span className="capture-label">{t("app.capture.button")}</span>
             {shortcut?.registered && shortcutText && (
-              <kbd className="capture-shortcut" aria-label={`Shortcut ${shortcutText}`}>
+              <kbd
+                className="capture-shortcut"
+                aria-label={t("app.capture.shortcutLabel", { shortcut: shortcutText })}
+              >
                 {shortcutText}
               </kbd>
             )}
           </button>
-          <p className="hint">
-            Freezes every display. Drag to select a region, press <kbd>Esc</kbd> to cancel.
-          </p>
+          <p className="hint">{richMessage("app.capture.hint", { esc: <kbd>Esc</kbd> })}</p>
           <button
             type="button"
             className="record-button"
@@ -130,11 +152,15 @@ export function App() {
             disabled={status !== null && !captureSupported}
           >
             <RecordIcon size={16} />
-            Record Region
+            {t("app.record.button")}
           </button>
           <p className="hint">
-            Records the selected region as an MP4 video. Stop it from the menu bar
-            {shortcut?.registered && shortcutText ? ` or with ${shortcutText}` : ""}.
+            {t("app.record.hint", {
+              shortcut:
+                shortcut?.registered && shortcutText
+                  ? t("app.record.orShortcut", { shortcut: shortcutText })
+                  : "",
+            })}
           </p>
           {captureSupported && <RecordingAudio />}
         </section>
@@ -145,9 +171,9 @@ export function App() {
           </p>
         )}
 
-        <ul className="features" aria-label="Features">
-          {FEATURES.map((feature) => (
-            <li key={feature.title} className="feature">
+        <ul className="features" aria-label={t("app.features.label")}>
+          {features().map((feature) => (
+            <li key={feature.id} className="feature">
               <span className="feature-icon">{feature.icon}</span>
               <h2>{feature.title}</h2>
               <p>{feature.text}</p>
@@ -155,39 +181,38 @@ export function App() {
           ))}
         </ul>
 
-        <ul className="status" aria-label="Status">
+        <ul className="status" aria-label={t("app.status.label")}>
           <StatusRow
             icon={<MenuBarIcon />}
-            title={`Runs in the ${trayName}`}
-            value="Running"
+            title={t(
+              tray === "menuBar" ? "app.status.runsInMenuBar" : "app.status.runsInSystemTray",
+            )}
+            value={t("app.status.running")}
             tone="ok"
           >
-            <p className="status-detail">Closing this window keeps Snipvero running.</p>
+            <p className="status-detail">{t("app.status.keepsRunning")}</p>
           </StatusRow>
 
-          <StatusRow icon={<ShieldIcon />} title="Screen Recording" {...permission}>
+          <StatusRow icon={<ShieldIcon />} title={t("app.permission.title")} {...permission}>
             {needsPermission && (
               <div className="status-detail" role="alert">
-                <p>
-                  Turn on Snipvero in System Settings → Privacy &amp; Security → Screen &amp; System
-                  Audio Recording. If capture still fails, restart Snipvero.
-                </p>
+                <p>{t("app.permission.help")}</p>
                 <div className="actions">
                   <button
                     type="button"
                     className="button"
                     onClick={() => void openScreenRecordingSettings()}
                   >
-                    Open System Settings
+                    {t("app.permission.openSettings")}
                   </button>
                   <button type="button" className="button" onClick={() => void restartApp()}>
-                    Restart Snipvero
+                    {t("app.permission.restart")}
                   </button>
                 </div>
               </div>
             )}
             {status && !status.captureSupported && (
-              <p className="status-detail">Screen capture is not available on this platform yet.</p>
+              <p className="status-detail">{t("app.permission.unsupported")}</p>
             )}
           </StatusRow>
 
@@ -195,7 +220,7 @@ export function App() {
             <ShortcutRow
               shortcut={shortcut}
               platform={platform}
-              trayName={trayName}
+              tray={tray}
               onChange={shortcutChanged}
             />
           )}
@@ -207,11 +232,13 @@ export function App() {
       </main>
 
       <footer className="footer">
-        <span className="footer-version">{info && `Version ${info.version}`}</span>
+        <span className="footer-version">
+          {info && t("app.footer.version", { version: info.version })}
+        </span>
         <div className="footer-links">
           <button type="button" className="link-button" onClick={() => void showAbout()}>
             <InfoIcon />
-            About Snipvero
+            {t("app.footer.about")}
           </button>
           {info && (
             <ExternalLink link="website" href={info.website} className="footer-link">

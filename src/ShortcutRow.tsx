@@ -7,9 +7,12 @@ import {
   type ShortcutRejection,
   type ShortcutStatus,
 } from "./ipc";
+import { t, useLanguage } from "./i18n";
 import { shortcutLabel, type Platform } from "./platform";
+import { richMessage } from "./richMessage";
 import { DEFAULT_ACCELERATOR, acceleratorFromKey, isCancel, rejectionMessage } from "./shortcut";
 import { StatusRow } from "./StatusRow";
+import type { Tray } from "./platform";
 
 /**
  * The main window's global shortcut row: status, and recording a new shortcut (ADR-030). While
@@ -19,14 +22,15 @@ import { StatusRow } from "./StatusRow";
 export function ShortcutRow({
   shortcut,
   platform,
-  trayName,
+  tray,
   onChange,
 }: {
   shortcut: ShortcutStatus;
   platform: Platform;
-  trayName: string;
+  tray: Tray;
   onChange: (status: ShortcutStatus) => void;
 }) {
+  useLanguage();
   const [recording, setRecording] = useState(false);
   const [rejection, setRejection] = useState<ShortcutRejection | null>(null);
   const pending = useRef(false);
@@ -105,27 +109,27 @@ export function ShortcutRow({
   let value = label;
   let tone: "ok" | "warning" | "neutral" = "ok";
   if (recording) {
-    value = "Recording…";
+    value = t("app.shortcut.recording");
     tone = "neutral";
   } else if (!shortcut.registered) {
-    value = "Unavailable";
+    value = t("app.shortcut.unavailable");
     tone = "warning";
   }
 
   return (
     <StatusRow
       icon={<KeyboardIcon />}
-      title="Global shortcut"
+      title={t("app.shortcut.title")}
       value={value}
       tone={tone}
       aside={
         recording ? (
           <button type="button" className="button" onClick={stop}>
-            Cancel
+            {t("app.shortcut.cancel")}
           </button>
         ) : (
           <button type="button" className="button" onClick={start}>
-            Change…
+            {t("app.shortcut.change")}
           </button>
         )
       }
@@ -133,14 +137,19 @@ export function ShortcutRow({
       <div className="status-detail shortcut-detail">
         {recording && (
           <p className="shortcut-recorder" ref={prompt} tabIndex={-1} role="status">
-            Press the new shortcut, or <kbd>Esc</kbd> to cancel.
+            {richMessage("app.shortcut.prompt", { esc: <kbd>Esc</kbd> })}
           </p>
         )}
         {!recording && !shortcut.registered && (
           <p role="alert">
-            <kbd>{label}</kbd> could not be registered, probably because another app uses it{" "}
-            {`(${shortcut.error ?? "no reason given"}).`} Choose another shortcut, or use{" "}
-            <strong>Capture</strong> in the {trayName}.
+            <kbd>{label}</kbd>
+            {richMessage(
+              tray === "menuBar"
+                ? "app.shortcut.notRegisteredMenuBar"
+                : "app.shortcut.notRegisteredSystemTray",
+              { capture: <strong>{t("app.shortcut.trayCapture")}</strong> },
+              { reason: shortcut.error ?? t("app.shortcut.noReason") },
+            )}
           </p>
         )}
         {rejection && (
@@ -151,7 +160,9 @@ export function ShortcutRow({
         {!recording && shortcut.accelerator !== DEFAULT_ACCELERATOR && (
           <div className="actions">
             <button type="button" className="button" onClick={() => void apply(null)}>
-              Reset to {shortcutLabel(DEFAULT_ACCELERATOR, platform)}
+              {t("app.shortcut.reset", {
+                shortcut: shortcutLabel(DEFAULT_ACCELERATOR, platform),
+              })}
             </button>
           </div>
         )}

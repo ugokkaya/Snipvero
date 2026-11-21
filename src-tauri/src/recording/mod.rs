@@ -29,6 +29,7 @@ use crate::geometry::{
     LogicalRect, PixelRect, RECORDING_FPS, RecordingGeometry, RegionError, recording_bitrate,
     recording_geometry,
 };
+use crate::i18n::tr;
 use crate::overlay::{self, CaptureState, Mode};
 use crate::settings;
 use crate::tray;
@@ -217,12 +218,27 @@ impl StopReason {
     fn notice(&self) -> Option<String> {
         match self {
             StopReason::User => None,
-            StopReason::Cap(cap) => Some(format!(
-                "The recording stopped at the maximum length ({}).",
-                clock(*cap)
+            StopReason::Cap(cap) => Some(tr!(
+                format!(
+                    "The recording stopped at the maximum length ({}).",
+                    clock(*cap)
+                ),
+                format!(
+                    "Kayıt, en uzun süreye ({}) ulaştığı için durduruldu.",
+                    clock(*cap)
+                )
             )),
-            StopReason::Size => Some("The recording stopped at the maximum file size.".into()),
-            StopReason::Failure(message) => Some(format!("The recording stopped early: {message}")),
+            StopReason::Size => Some(
+                tr!(
+                    "The recording stopped at the maximum file size.",
+                    "Kayıt, en büyük dosya boyutuna ulaştığı için durduruldu."
+                )
+                .into(),
+            ),
+            StopReason::Failure(message) => Some(tr!(
+                format!("The recording stopped early: {message}"),
+                format!("Kayıt erken durduruldu: {message}")
+            )),
         }
     }
 }
@@ -241,17 +257,26 @@ pub enum RecordingError {
 impl fmt::Display for RecordingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RecordingError::Unsupported => {
-                f.write_str("Screen recording is not available on this platform yet.")
-            }
+            RecordingError::Unsupported => f.write_str(tr!(
+                "Screen recording is not available on this platform yet.",
+                "Ekran kaydı bu platformda henüz kullanılamıyor."
+            )),
             RecordingError::PermissionDenied => {
                 f.write_str(&crate::capture::CaptureError::PermissionDenied.to_string())
             }
             RecordingError::Refused(message) => f.write_str(message),
-            RecordingError::Failed(reason) => write!(f, "Screen recording failed: {reason}"),
-            RecordingError::NoFrames => {
-                f.write_str("Nothing was recorded: the screen delivered no picture.")
-            }
+            RecordingError::Failed(reason) => write!(
+                f,
+                "{}",
+                tr!(
+                    format!("Screen recording failed: {reason}"),
+                    format!("Ekran kaydı başarısız oldu: {reason}")
+                )
+            ),
+            RecordingError::NoFrames => f.write_str(tr!(
+                "Nothing was recorded: the screen delivered no picture.",
+                "Hiçbir şey kaydedilmedi: ekran görüntü iletmedi."
+            )),
         }
     }
 }
@@ -521,11 +546,11 @@ pub fn cap_from_setting(seconds: Option<u32>) -> Duration {
 /// The tray's recording row for a phase: its label and whether it can be clicked.
 pub fn menu_entry(phase: Phase) -> (&'static str, bool) {
     match phase {
-        Phase::Idle => ("Record Region", true),
-        Phase::Starting => ("Starting Recording…", false),
-        Phase::Recording => ("Stop Recording", true),
-        Phase::Stopping => ("Saving Recording…", false),
-        Phase::Finished => ("Review Last Recording…", true),
+        Phase::Idle => (tr!("Record Region", "Bölge Kaydı Başlat"), true),
+        Phase::Starting => (tr!("Starting Recording…", "Kayıt Başlıyor…"), false),
+        Phase::Recording => (tr!("Stop Recording", "Kaydı Durdur"), true),
+        Phase::Stopping => (tr!("Saving Recording…", "Kayıt Kaydediliyor…"), false),
+        Phase::Finished => (tr!("Review Last Recording…", "Son Kaydı İncele…"), true),
     }
 }
 
@@ -591,7 +616,12 @@ impl RecordingState {
             return Ok(dir.clone());
         }
         let created = tempfiles::create_launch_dir(&tempfiles::root(), std::process::id())
-            .map_err(|e| format!("Could not create the folder for recordings: {e}"))?;
+            .map_err(|e| {
+                tr!(
+                    format!("Could not create the folder for recordings: {e}"),
+                    format!("Kayıtlar için klasör oluşturulamadı: {e}")
+                )
+            })?;
         *dir = Some(created.clone());
         Ok(created)
     }
@@ -599,9 +629,21 @@ impl RecordingState {
 
 fn region_message(error: RegionError) -> String {
     match error {
-        RegionError::Outside => "The selection is outside the display.".into(),
-        RegionError::TooSmall => "The region is too small to record. Select at least 16 × 16 pixels.".into(),
-        RegionError::TooLarge => "The region is too large to record as video. Select at most 8192 pixels per side and about 9.4 megapixels (for example 3840 × 2160).".into(),
+        RegionError::Outside => tr!(
+            "The selection is outside the display.",
+            "Seçim ekranın dışında."
+        )
+        .into(),
+        RegionError::TooSmall => tr!(
+            "The region is too small to record. Select at least 16 × 16 pixels.",
+            "Bölge kaydedilemeyecek kadar küçük. En az 16 × 16 piksel seçin."
+        )
+        .into(),
+        RegionError::TooLarge => tr!(
+            "The region is too large to record as video. Select at most 8192 pixels per side and about 9.4 megapixels (for example 3840 × 2160).",
+            "Bölge video olarak kaydedilemeyecek kadar büyük. Kenar başına en fazla 8192 piksel ve yaklaşık 9,4 megapiksel seçin (örneğin 3840 × 2160)."
+        )
+        .into(),
     }
 }
 
@@ -667,9 +709,11 @@ fn refresh_ui(app: &AppHandle, id: u64) {
 fn stop_hint(app: &AppHandle) -> Option<String> {
     let status = app.state::<crate::shortcut::ShortcutRegistry>().status()?;
     status.registered.then(|| {
-        format!(
-            "or press {}",
-            crate::shortcut::display_accelerator(&status.accelerator, cfg!(target_os = "macos"))
+        let keys =
+            crate::shortcut::display_accelerator(&status.accelerator, cfg!(target_os = "macos"));
+        tr!(
+            format!("or press {keys}"),
+            format!("veya {keys} tuşuna basın")
         )
     })
 }
@@ -761,9 +805,12 @@ fn begin(
     if let Some(available) = platform::available_space(&dir)
         && available < required
     {
-        return Err(format!(
-            "Not enough free disk space to record. About {} MB must be free.",
-            required.div_ceil(1_000_000)
+        let megabytes = required.div_ceil(1_000_000);
+        return Err(tr!(
+            format!("Not enough free disk space to record. About {megabytes} MB must be free."),
+            format!(
+                "Kayıt için yeterli boş disk alanı yok. Yaklaşık {megabytes} MB boş alan gerekiyor."
+            )
         ));
     }
 
@@ -772,10 +819,20 @@ fn begin(
         .begin_start(cap, (geometry.width, geometry.height))
     {
         Ok(id) => id,
-        Err(Refusal::Busy) => return Err("A recording is already in progress.".into()),
+        Err(Refusal::Busy) => {
+            return Err(tr!(
+                "A recording is already in progress.",
+                "Bir kayıt zaten sürüyor."
+            )
+            .into());
+        }
         Err(Refusal::Pending) => {
             show_review(app);
-            return Err("Save or discard the previous recording first.".into());
+            return Err(tr!(
+                "Save or discard the previous recording first.",
+                "Önce önceki kaydı kaydedin veya atın."
+            )
+            .into());
         }
     };
     recording.machine().set_audio(id, audio);
@@ -784,7 +841,11 @@ fn begin(
         .set_point_width(id, geometry.source.width.round() as u32);
     if !take_over() {
         recording.machine().fail_start(id);
-        return Err("The capture is no longer active.".into());
+        return Err(tr!(
+            "The capture is no longer active.",
+            "Yakalama artık etkin değil."
+        )
+        .into());
     }
     *lock(&recording.target) = Some(Target {
         bounds: target.bounds,
@@ -1070,7 +1131,7 @@ fn show_review(app: &AppHandle) {
             return;
         }
         let built = WebviewWindowBuilder::new(&app, LABEL, WebviewUrl::App("index.html".into()))
-            .title("Snipvero recording")
+            .title(tr!("Snipvero recording", "Snipvero kaydı"))
             .inner_size(760.0, 640.0)
             .min_inner_size(560.0, 480.0)
             .center()
@@ -1080,7 +1141,10 @@ fn show_review(app: &AppHandle) {
             eprintln!("[recording] could not open the review window: {error}");
             fail(
                 &app,
-                "The recording is ready, but its window could not open.",
+                tr!(
+                    "The recording is ready, but its window could not open.",
+                    "Kayıt hazır, ancak penceresi açılamadı."
+                ),
             );
         }
     });
@@ -1139,7 +1203,11 @@ pub async fn recording_set_audio(
     enabled: bool,
 ) -> Result<AudioStatus, String> {
     if window.label() != crate::MAIN_WINDOW {
-        return Err("sound can only be changed in the main window".into());
+        return Err(tr!(
+            "sound can only be changed in the main window",
+            "ses yalnızca ana pencereden değiştirilebilir"
+        )
+        .into());
     }
     if !platform::SUPPORTED {
         return Err(RecordingError::Unsupported.to_string());
@@ -1199,7 +1267,12 @@ pub fn recording_copy(id: u64, kind: CopyKind, state: State<RecordingState>) -> 
         CopyKind::File => platform::copy_file(&file),
         CopyKind::Path => platform::copy_text(&file.to_string_lossy()),
     }
-    .map_err(|error| format!("Could not copy the recording: {error}"))
+    .map_err(|error| {
+        tr!(
+            format!("Could not copy the recording: {error}"),
+            format!("Kayıt kopyalanamadı: {error}")
+        )
+    })
 }
 
 /// Asks where to save the finished recording `id`, then copies the temporary file there, through
@@ -1237,9 +1310,9 @@ async fn save(
     file_name: String,
 ) -> Result<ExportOutcome, String> {
     let dialog = rfd::FileDialog::new()
-        .set_title("Save recording")
+        .set_title(tr!("Save recording", "Kaydı kaydet"))
         .set_file_name(file_name)
-        .add_filter("MP4 video", &["mp4"])
+        .add_filter(tr!("MP4 video", "MP4 videosu"), &["mp4"])
         .set_parent(window);
     let Some(path) = tauri::async_runtime::spawn_blocking(move || dialog.save_file())
         .await
@@ -1256,7 +1329,12 @@ async fn save(
     })
     .await
     .map_err(|e| format!("save failed: {e}"))?
-    .map_err(|e| format!("Could not save {}: {e}", path.display()))?;
+    .map_err(|e| {
+        tr!(
+            format!("Could not save {}: {e}", path.display()),
+            format!("{} kaydedilemedi: {e}", path.display())
+        )
+    })?;
     eprintln!("[recording] saved to {}", path.display());
     Ok(ExportOutcome::Done)
 }
@@ -1375,9 +1453,9 @@ async fn export_gif(
     state: &RecordingState,
 ) -> Result<GifExport, String> {
     let dialog = rfd::FileDialog::new()
-        .set_title("Export GIF")
+        .set_title(tr!("Export GIF", "GIF olarak dışa aktar"))
         .set_file_name(file_name)
-        .add_filter("GIF image", &["gif"])
+        .add_filter(tr!("GIF image", "GIF görüntüsü"), &["gif"])
         .set_parent(window);
     let Some(path) = tauri::async_runtime::spawn_blocking(move || dialog.save_file())
         .await
@@ -1417,9 +1495,10 @@ async fn export_gif(
             bytes: 0,
             frames: 0,
         }),
-        Err(gif::ExportFailure::Failed(reason)) => {
-            Err(format!("Could not export {}: {reason}", path.display()))
-        }
+        Err(gif::ExportFailure::Failed(reason)) => Err(tr!(
+            format!("Could not export {}: {reason}", path.display()),
+            format!("{} dışa aktarılamadı: {reason}", path.display())
+        )),
     }
 }
 

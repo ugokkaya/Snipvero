@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { t, useLanguage } from "../i18n";
 import {
   FONT_FAMILY,
   LINE_HEIGHT,
@@ -23,6 +24,7 @@ interface Props {
  * Turkish) work as in any text field. It matches the Konva text's font, size and line boxes.
  */
 export function TextEditor({ draft, origin, view, frame, measure, onChange, onCommit }: Props) {
+  useLanguage();
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     // Focused after mount (on pointer release), so the press can no longer move focus elsewhere.
@@ -45,7 +47,7 @@ export function TextEditor({ draft, origin, view, frame, measure, onChange, onCo
       autoCorrect="off"
       autoCapitalize="off"
       wrap="off"
-      aria-label="Annotation text"
+      aria-label={t("overlay.textEditor")}
       style={{
         left: (origin.x + draft.at.x) / ratio.x,
         top: (origin.y + draft.at.y) / ratio.y,

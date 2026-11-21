@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { About, DESCRIPTION, DEVELOPER } from "./About";
+import { About, description, DEVELOPER } from "./About";
 import type { AppInfo } from "./ipc";
 
 const ipc = vi.hoisted(() => ({
@@ -68,7 +68,7 @@ describe("About window", () => {
     expect(text()).toContain(
       "A lightweight, open-source screenshot and annotation application for macOS.",
     );
-    expect(DESCRIPTION).toContain("open-source");
+    expect(description()).toContain("open-source");
     expect(text()).toContain(DEVELOPER);
     expect(text()).toContain("MIT License");
     expect(container.querySelector(".about-copyright")?.textContent).toBe(
