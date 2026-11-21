@@ -58,6 +58,7 @@ pub fn parse(setting: &str) -> Option<Lang> {
 }
 
 /// Turkish if the first preferred language of the system is Turkish, else English.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn from_preferred(first: Option<&str>) -> Lang {
     match first {
         Some(tag)
