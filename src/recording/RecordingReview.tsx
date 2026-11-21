@@ -8,12 +8,17 @@ import {
   recordingStatus,
   type RecordingStatus,
 } from "../ipc";
+import { t, useLanguage } from "../i18n";
 import { soundLabel } from "./audio";
 import { GifExport } from "./GifExport";
 import { formatBytes, formatClock, recordingFileName } from "./format";
 
 const errorMessage = (error: unknown) =>
-  typeof error === "string" ? error : error instanceof Error ? error.message : "Action failed.";
+  typeof error === "string"
+    ? error
+    : error instanceof Error
+      ? error.message
+      : t("recording.actionFailed");
 
 type Action = "save" | "discard" | "copy-file" | "copy-path";
 
@@ -23,6 +28,7 @@ type Action = "save" | "discard" | "copy-file" | "copy-path";
  * recording by an opaque id, never by a path.
  */
 export function RecordingReview() {
+  useLanguage();
   const [status, setStatus] = useState<RecordingStatus | null>(null);
 
   useEffect(() => {
@@ -40,8 +46,8 @@ export function RecordingReview() {
       <main className="review">
         <p className="review-empty">
           {status?.phase === "recording" || status?.phase === "stopping"
-            ? "Recording in progress. Stop it from the menu bar."
-            : "There is no recording to review."}
+            ? t("recording.review.inProgress")
+            : t("recording.review.none")}
         </p>
       </main>
     );
@@ -51,6 +57,7 @@ export function RecordingReview() {
 }
 
 function Review({ id, status }: { id: number; status: RecordingStatus }) {
+  useLanguage();
   const [busy, setBusy] = useState<Action | null>(null);
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [previewFailed, setPreviewFailed] = useState(false);
@@ -74,10 +81,10 @@ function Review({ id, status }: { id: number; status: RecordingStatus }) {
   const disabled = busy !== null || exportingGif;
   return (
     <main className="review">
-      <h1>Recording</h1>
+      <h1>{t("recording.review.title")}</h1>
       <div className="review-player">
         {previewFailed ? (
-          <p className="review-empty">The preview could not be played. You can still save it.</p>
+          <p className="review-empty">{t("recording.review.previewFailed")}</p>
         ) : (
           <video
             src={recordingSource(id)}
@@ -89,21 +96,21 @@ function Review({ id, status }: { id: number; status: RecordingStatus }) {
       </div>
       <dl className="review-details">
         <div>
-          <dt>Size</dt>
+          <dt>{t("recording.review.size")}</dt>
           <dd>
             {status.width} × {status.height} px
           </dd>
         </div>
         <div>
-          <dt>Length</dt>
+          <dt>{t("recording.review.length")}</dt>
           <dd>{formatClock(status.durationMs ?? 0)}</dd>
         </div>
         <div>
-          <dt>Sound</dt>
+          <dt>{t("recording.review.sound")}</dt>
           <dd>{soundLabel(status.systemAudio, status.microphone)}</dd>
         </div>
         <div>
-          <dt>File</dt>
+          <dt>{t("recording.review.file")}</dt>
           <dd>{formatBytes(status.bytes)}</dd>
         </div>
       </dl>
@@ -123,23 +130,27 @@ function Review({ id, status }: { id: number; status: RecordingStatus }) {
           disabled={disabled}
           onClick={() => void run("save", () => recordingSave(id, recordingFileName(new Date())))}
         >
-          Save…
+          {t("recording.review.save")}
         </button>
         <button
           type="button"
           className="button"
           disabled={disabled}
-          onClick={() => void run("copy-file", () => recordingCopy(id, "file"), "File copied.")}
+          onClick={() =>
+            void run("copy-file", () => recordingCopy(id, "file"), t("recording.review.fileCopied"))
+          }
         >
-          Copy File
+          {t("recording.review.copyFile")}
         </button>
         <button
           type="button"
           className="button"
           disabled={disabled}
-          onClick={() => void run("copy-path", () => recordingCopy(id, "path"), "Path copied.")}
+          onClick={() =>
+            void run("copy-path", () => recordingCopy(id, "path"), t("recording.review.pathCopied"))
+          }
         >
-          Copy Path
+          {t("recording.review.copyPath")}
         </button>
         <button
           type="button"
@@ -147,7 +158,7 @@ function Review({ id, status }: { id: number; status: RecordingStatus }) {
           disabled={disabled || gifOpen}
           onClick={() => setGifOpen(true)}
         >
-          Export as GIF…
+          {t("recording.review.exportGif")}
         </button>
         <button
           type="button"
@@ -155,7 +166,7 @@ function Review({ id, status }: { id: number; status: RecordingStatus }) {
           disabled={disabled}
           onClick={() => void run("discard", () => recordingDiscard(id))}
         >
-          Discard
+          {t("recording.review.discard")}
         </button>
       </div>
       {gifOpen && (
@@ -166,10 +177,7 @@ function Review({ id, status }: { id: number; status: RecordingStatus }) {
           onClose={() => setGifOpen(false)}
         />
       )}
-      <p className="review-hint">
-        The recording is a temporary file. Copies of it, and of its path, only last until you save,
-        discard it or quit Snipvero.
-      </p>
+      <p className="review-hint">{t("recording.review.hint")}</p>
     </main>
   );
 }

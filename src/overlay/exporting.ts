@@ -1,6 +1,7 @@
 // Export decisions that need no canvas: what to rasterize, at which size, and the file name.
 // The pixels themselves are composed in Rust (src-tauri/src/export), from the frame it holds.
 
+import { t } from "../i18n";
 import type { ExportOutcome } from "../ipc";
 import { annotationBounds, type Annotation, type MeasureLine } from "./annotations";
 import type { Point, Rect, Size } from "./coords";
@@ -90,7 +91,11 @@ export type ExportResult =
   | { status: "failed"; message: string };
 
 const errorMessage = (error: unknown) =>
-  typeof error === "string" ? error : error instanceof Error ? error.message : "Export failed.";
+  typeof error === "string"
+    ? error
+    : error instanceof Error
+      ? error.message
+      : t("overlay.exportFailed");
 
 /**
  * One overlay's export flow. At most one request runs at a time (Rust rejects a second one too).

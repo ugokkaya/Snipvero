@@ -30,6 +30,8 @@ check for updates.
   cannot be undone in the exported image, or tint it with a translucent **Highlight**.
 - **Screen recording (macOS):** record any region of one display as an MP4 video (H.264, 30 fps), with optional system audio and microphone, or export it as a GIF.
   See [Screen recording](#screen-recording).
+- **English and Turkish:** the interface follows your system language. Change it any time with the
+  **Language** row in the main window; no restart is needed.
 - **Sharp on Retina:** the image keeps the display's full pixel resolution, including setups that
   mix Retina and standard displays.
 - **Copy or save:** copy to the clipboard (PNG and TIFF) or save a PNG through the standard save

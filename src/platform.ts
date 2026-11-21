@@ -1,5 +1,8 @@
 export type Platform = "macos" | "windows" | "other";
 
+/** Where the app lives while it runs: the macOS menu bar or the Windows system tray. */
+export type Tray = "menuBar" | "systemTray";
+
 export function detectPlatform(userAgent: string): Platform {
   if (/Mac OS X|Macintosh/.test(userAgent)) return "macos";
   if (/Windows/.test(userAgent)) return "windows";

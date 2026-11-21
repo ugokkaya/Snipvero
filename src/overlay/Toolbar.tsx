@@ -2,6 +2,7 @@ import { useId, useLayoutEffect, useRef, useState, type ReactNode } from "react"
 import { COLORS, type SizeLevel, type Style, type Tool } from "./annotations";
 import { placeOutside, type Point, type Size } from "./coords";
 import type { EditorAction } from "./editor";
+import { t, useLanguage, type MessageKey } from "../i18n";
 
 // Layout constants, mirrored by the `.toolbar` CSS, so the toolbar is placed without measuring it.
 const BUTTON = 28;
@@ -33,23 +34,35 @@ const icon = (path: ReactNode) => (
   </svg>
 );
 
-const TOOLS: readonly { tool: Tool; label: string; icon: ReactNode }[] = [
+const TOOLS: readonly { tool: Tool; label: MessageKey; icon: ReactNode }[] = [
   {
     tool: "select",
-    label: "Select and move",
+    label: "overlay.tool.select",
     icon: icon(<path d="M4 2.5v10l2.8-2.6 1.9 4.1 1.6-.7-1.9-4.1H12z" fill="currentColor" />),
   },
-  { tool: "arrow", label: "Arrow", icon: icon(<path d="M3 13 12.5 3.5M7 3.5h5.5V9" />) },
-  { tool: "rect", label: "Rectangle", icon: icon(<rect x="2.5" y="3.5" width="11" height="9" />) },
-  { tool: "text", label: "Text", icon: icon(<path d="M3 3.5h10M8 3.5v10M6 13.5h4" />) },
+  {
+    tool: "arrow",
+    label: "overlay.tool.arrow",
+    icon: icon(<path d="M3 13 12.5 3.5M7 3.5h5.5V9" />),
+  },
+  {
+    tool: "rect",
+    label: "overlay.tool.rect",
+    icon: icon(<rect x="2.5" y="3.5" width="11" height="9" />),
+  },
+  {
+    tool: "text",
+    label: "overlay.tool.text",
+    icon: icon(<path d="M3 3.5h10M8 3.5v10M6 13.5h4" />),
+  },
   {
     tool: "fill",
-    label: "Fill (cover an area)",
+    label: "overlay.tool.fill",
     icon: icon(<rect x="2.5" y="3.5" width="11" height="9" fill="currentColor" />),
   },
   {
     tool: "blur",
-    label: "Blur (pixelate an area)",
+    label: "overlay.tool.blur",
     icon: icon(
       <>
         <rect x="2.5" y="2.5" width="11" height="11" />
@@ -59,14 +72,13 @@ const TOOLS: readonly { tool: Tool; label: string; icon: ReactNode }[] = [
   },
   {
     tool: "highlight",
-    label: "Highlight",
+    label: "overlay.tool.highlight",
     icon: icon(<path d="M9.5 2.5l4 4-5.5 5.5H5.5V9.5zM5.5 12l-2 1.5h5" />),
   },
 ];
 
-const SIZE_LABELS = ["Small", "Medium", "Large"] as const;
+const SIZE_LABELS = ["overlay.size.small", "overlay.size.medium", "overlay.size.large"] as const;
 
-const RECORD_LABEL = "Record this region as video (annotations are not recorded)";
 const RECORD_ICON = icon(
   <>
     <circle cx="8" cy="8" r="5.5" />
@@ -124,6 +136,7 @@ function ToolbarTooltip({ id, anchor, label }: { id: string; anchor: HTMLElement
 
 /** Floating annotation toolbar next to the selection (FR-4). */
 export function Toolbar(props: Props) {
+  useLanguage();
   const tooltipId = useId();
   const [tooltip, setTooltip] = useState<{
     key: string;
@@ -176,11 +189,11 @@ export function Toolbar(props: Props) {
   );
   const recordButton = button(
     "record",
-    mode === "record" ? "Record this region as video" : RECORD_LABEL,
+    t(mode === "record" ? "overlay.record.label" : "overlay.record.tooltip"),
     mode === "record" ? (
       <>
         {RECORD_ICON}
-        <span>Record</span>
+        <span>{t("overlay.record.button")}</span>
       </>
     ) : (
       RECORD_ICON
@@ -211,21 +224,21 @@ export function Toolbar(props: Props) {
           recordButton
         ) : (
           <>
-            {TOOLS.map((t) =>
+            {TOOLS.map((entry) =>
               button(
-                t.tool,
-                t.label,
-                t.icon,
+                entry.tool,
+                t(entry.label),
+                entry.icon,
                 // Clicking the active drawing tool again returns to select, so no extra click is needed.
-                () => send({ type: "setTool", tool: t.tool === tool ? "select" : t.tool }),
-                { pressed: t.tool === tool },
+                () => send({ type: "setTool", tool: entry.tool === tool ? "select" : entry.tool }),
+                { pressed: entry.tool === tool },
               ),
             )}
             <span className="toolbar-separator" />
             {COLORS.map((color) =>
               button(
                 color,
-                `Color ${color}`,
+                t("overlay.color", { color }),
                 <span className="toolbar-swatch" style={{ background: color }} />,
                 () => send({ type: "setColor", color }),
                 { pressed: color === style.color, disabled: !controls.color },
@@ -235,7 +248,7 @@ export function Toolbar(props: Props) {
             {([0, 1, 2] as const satisfies readonly SizeLevel[]).map((size) =>
               button(
                 `size-${size}`,
-                `${SIZE_LABELS[size]} stroke and text`,
+                t(SIZE_LABELS[size]),
                 <span
                   className="toolbar-size"
                   style={{ width: 4 + size * 4, height: 4 + size * 4 }}
@@ -247,21 +260,21 @@ export function Toolbar(props: Props) {
             <span className="toolbar-separator" />
             {button(
               "undo",
-              `Undo (${keys.undo})`,
+              t("overlay.undo", { key: keys.undo }),
               icon(<path d="M5.5 3 2.5 6l3 3M2.5 6h7a4 4 0 0 1 0 8H7" />),
               () => send({ type: "undo" }),
               { disabled: !canUndo },
             )}
             {button(
               "redo",
-              `Redo (${keys.redo})`,
+              t("overlay.redo", { key: keys.redo }),
               icon(<path d="M10.5 3l3 3-3 3M13.5 6h-7a4 4 0 0 0 0 8H9" />),
               () => send({ type: "redo" }),
               { disabled: !canRedo },
             )}
             {button(
               "delete",
-              "Delete selected annotation (Delete)",
+              t("overlay.delete"),
               icon(<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 9h5.6l.7-9" />),
               () => send({ type: "delete" }),
               { disabled: !canDelete },
@@ -269,7 +282,7 @@ export function Toolbar(props: Props) {
             <span className="toolbar-separator" />
             {button(
               "delayed",
-              "Capture this region again in 5 seconds (clears annotations)",
+              t("overlay.delayed"),
               icon(
                 <>
                   <circle cx="8" cy="9" r="5.5" />
@@ -281,7 +294,7 @@ export function Toolbar(props: Props) {
             )}
             {button(
               "copy",
-              `Copy to clipboard (${keys.copy})`,
+              t("overlay.copy", { key: keys.copy }),
               icon(
                 <>
                   <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
@@ -293,7 +306,7 @@ export function Toolbar(props: Props) {
             )}
             {button(
               "save",
-              `Save as PNG (${keys.save})`,
+              t("overlay.save", { key: keys.save }),
               icon(<path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10" />),
               () => onExport("save"),
               { disabled: !canExport },

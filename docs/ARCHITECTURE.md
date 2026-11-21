@@ -50,6 +50,7 @@ index.html, src/              React frontend (every window loads index.html)
   frame.ts                    raw RGBA IPC → ImageData → ImageBitmap (ADR-007)
   ipc.ts                      typed commands/events, mirrored in src-tauri/src/events.rs
   platform.ts                 platform detection, accelerator display labels
+  i18n.ts, locales/*.ts       interface language: current language, t(), per-area English/Turkish catalogues (ADR-039)
 src-tauri/
   tauri.conf.json             app config (identifier, CSP incl. ipc:, ad-hoc macOS signing)
   Info.plist                  macOS: LSUIElement (menu bar app, no Dock icon)
@@ -63,6 +64,7 @@ src-tauri/
    src/about.rs                About window (created on demand), app metadata, fixed links (website, repository, contributors, license)
   src/update.rs               user-started update check, download, install and restart (tauri-plugin-updater, ADR-028)
   src/shortcut.rs             global shortcut registration, validation, change/suspend commands, status/error reporting
+  src/i18n.rs                 interface language: stored setting, system detection, `tr!` English/Turkish pairs, language_get/set (ADR-039)
   src/settings.rs             settings.json in the app config directory (capture shortcut), atomic writes (ADR-030)
   src/system/{mod,macos}.rs   previous-app focus restoration, fixed System Settings URL, open URL / file (NSWorkspace)
   src/events.rs               event names shared with the frontend

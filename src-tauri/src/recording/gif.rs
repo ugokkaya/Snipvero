@@ -24,6 +24,8 @@ use std::time::Duration;
 use gif::{DisposalMethod, Encoder, Frame, Repeat};
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::tr;
+
 /// Highest frame rate offered, and the default (ADR-037).
 pub const MAX_FPS: u32 = 15;
 pub const DEFAULT_FPS: u32 = 10;
@@ -105,31 +107,51 @@ pub enum GifError {
 impl fmt::Display for GifError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            GifError::TooLong(length) => write!(
-                f,
-                "This recording is {} long. A GIF can be made from at most {} seconds of video; \
-                 save it as an MP4 instead.",
-                super::clock(*length),
-                MAX_SOURCE.as_secs()
-            ),
-            GifError::BadFps(fps) => {
-                write!(
-                    f,
-                    "The frame rate must be between 1 and {MAX_FPS} (got {fps})."
-                )
+            GifError::TooLong(length) => {
+                let (clock, seconds) = (super::clock(*length), MAX_SOURCE.as_secs());
+                f.write_str(&tr!(
+                    format!(
+                        "This recording is {clock} long. A GIF can be made from at most {seconds} seconds of video; \
+                         save it as an MP4 instead."
+                    ),
+                    format!(
+                        "Bu kayıt {clock} uzunluğunda. En fazla {seconds} saniyelik videodan GIF oluşturulabilir; \
+                         bunun yerine MP4 olarak kaydedin."
+                    )
+                ))
             }
-            GifError::BadWidth { width, max } => write!(
-                f,
-                "The width must be between {MIN_WIDTH} and {max} pixels (got {width})."
-            ),
-            GifError::FrameSize { expected, got } => write!(
-                f,
-                "The video changed size from {}×{} to {}×{}.",
-                expected.0, expected.1, got.0, got.1
-            ),
-            GifError::ShortFrame => f.write_str("A picture of the video was incomplete."),
-            GifError::NoFrames => f.write_str("The recording has no picture to make a GIF from."),
-            GifError::Encoding(reason) => write!(f, "The GIF could not be written: {reason}"),
+            GifError::BadFps(fps) => f.write_str(&tr!(
+                format!("The frame rate must be between 1 and {MAX_FPS} (got {fps})."),
+                format!("Kare hızı 1 ile {MAX_FPS} arasında olmalı (girilen: {fps}).")
+            )),
+            GifError::BadWidth { width, max } => f.write_str(&tr!(
+                format!("The width must be between {MIN_WIDTH} and {max} pixels (got {width})."),
+                format!(
+                    "Genişlik {MIN_WIDTH} ile {max} piksel arasında olmalı (girilen: {width})."
+                )
+            )),
+            GifError::FrameSize { expected, got } => f.write_str(&tr!(
+                format!(
+                    "The video changed size from {}×{} to {}×{}.",
+                    expected.0, expected.1, got.0, got.1
+                ),
+                format!(
+                    "Videonun boyutu {}×{} değerinden {}×{} değerine değişti.",
+                    expected.0, expected.1, got.0, got.1
+                )
+            )),
+            GifError::ShortFrame => f.write_str(tr!(
+                "A picture of the video was incomplete.",
+                "Videonun bir karesi eksikti."
+            )),
+            GifError::NoFrames => f.write_str(tr!(
+                "The recording has no picture to make a GIF from.",
+                "Kayıtta GIF oluşturulacak görüntü yok."
+            )),
+            GifError::Encoding(reason) => f.write_str(&tr!(
+                format!("The GIF could not be written: {reason}"),
+                format!("GIF yazılamadı: {reason}")
+            )),
         }
     }
 }

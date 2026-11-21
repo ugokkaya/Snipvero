@@ -9,7 +9,7 @@
         (for example, 0.1.0-beta.2) is dropped; CFBundleVersion (bundle.macOS.bundleVersion) tells builds apart.
        Overrides the bundler's value; a Rust test keeps it equal to the package version's core. -->
   <key>CFBundleShortVersionString</key>
-  <string>0.1.0</string>
+  <string>0.2.0</string>
   <!-- Shown by the system when the microphone is first switched on for a screen recording. Without
        the key macOS ends the app on the first microphone access. Nothing touches the microphone
        while the option is off (ADR-037). -->

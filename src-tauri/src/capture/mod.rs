@@ -8,6 +8,7 @@ use std::fmt;
 use serde::Serialize;
 
 use crate::geometry::LogicalRect;
+use crate::i18n::tr;
 
 #[cfg(target_os = "macos")]
 mod macos;
@@ -54,14 +55,25 @@ pub enum CaptureError {
 impl fmt::Display for CaptureError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CaptureError::PermissionDenied => f.write_str(
+            CaptureError::PermissionDenied => f.write_str(tr!(
                 "Screen Recording permission is required. Allow Snipvero in System Settings → \
                  Privacy & Security → Screen & System Audio Recording, then restart Snipvero.",
+                "Ekran Kaydı izni gerekiyor. Sistem Ayarları → Gizlilik ve Güvenlik → \
+                 Ekran ve Sistem Ses Kaydı bölümünde Snipvero'ya izin verin, ardından \
+                 Snipvero'yu yeniden başlatın."
+            )),
+            CaptureError::Unsupported => f.write_str(tr!(
+                "Screen capture is not implemented on this platform yet.",
+                "Ekran yakalama bu platformda henüz desteklenmiyor."
+            )),
+            CaptureError::Failed(reason) => write!(
+                f,
+                "{}",
+                tr!(
+                    format!("Screen capture failed: {reason}"),
+                    format!("Ekran yakalama başarısız oldu: {reason}")
+                )
             ),
-            CaptureError::Unsupported => {
-                f.write_str("Screen capture is not implemented on this platform yet.")
-            }
-            CaptureError::Failed(reason) => write!(f, "Screen capture failed: {reason}"),
         }
     }
 }

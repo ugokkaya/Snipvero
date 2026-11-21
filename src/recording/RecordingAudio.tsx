@@ -6,10 +6,15 @@ import {
   type AudioKind,
   type AudioStatus,
 } from "../ipc";
+import { t, useLanguage } from "../i18n";
 import { microphoneView } from "./audio";
 
 const errorMessage = (error: unknown) =>
-  typeof error === "string" ? error : error instanceof Error ? error.message : "Action failed.";
+  typeof error === "string"
+    ? error
+    : error instanceof Error
+      ? error.message
+      : t("recording.actionFailed");
 
 /**
  * The two sound switches of a recording, both off by default and remembered by Rust. Nothing
@@ -17,6 +22,7 @@ const errorMessage = (error: unknown) =>
  * does not allow stays off, with the way to allow it.
  */
 export function RecordingAudio() {
+  useLanguage();
   const [audio, setAudio] = useState<AudioStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,14 +61,14 @@ export function RecordingAudio() {
   return (
     <div className="audio">
       <fieldset className="audio-options" disabled={busy}>
-        <legend>Sound</legend>
+        <legend>{t("recording.audio.legend")}</legend>
         <label className="audio-option">
           <input
             type="checkbox"
             checked={audio.system}
             onChange={(event) => void change("system", event.target.checked)}
           />
-          <span>System audio</span>
+          <span>{t("recording.audio.system")}</span>
         </label>
         <label className="audio-option">
           <input
@@ -71,13 +77,10 @@ export function RecordingAudio() {
             disabled={!microphone.available}
             onChange={(event) => void change("microphone", event.target.checked)}
           />
-          <span>Microphone</span>
+          <span>{t("recording.audio.microphone")}</span>
         </label>
       </fieldset>
-      <p className="hint">
-        Sound is off unless you turn it on. The first time you turn on the microphone, macOS asks
-        for permission.
-      </p>
+      <p className="hint">{t("recording.audio.hint")}</p>
       {error && (
         <p className="banner" role="alert">
           {error}
@@ -86,23 +89,17 @@ export function RecordingAudio() {
       {showGuidance && (
         <div className="audio-guidance" role="alert">
           {microphone.guidance === "restricted" ? (
-            <p>
-              Microphone access is restricted on this Mac (for example by a profile), so Snipvero
-              cannot record it.
-            </p>
+            <p>{t("recording.audio.restricted")}</p>
           ) : (
             <>
-              <p>
-                Microphone access is off for Snipvero. Turn it on in System Settings → Privacy &amp;
-                Security → Microphone, then switch the microphone on here again.
-              </p>
+              <p>{t("recording.audio.denied")}</p>
               <div className="actions">
                 <button
                   type="button"
                   className="button"
                   onClick={() => void openMicrophoneSettings()}
                 >
-                  Open System Settings
+                  {t("recording.audio.openSettings")}
                 </button>
               </div>
             </>

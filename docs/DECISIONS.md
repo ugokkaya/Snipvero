@@ -1347,3 +1347,36 @@ the Accessibility permission), keyboard operation, VoiceOver, mixed-DPI placemen
   annotation geometry and hit tests, the drawing, resize, move and undo flows, shape specs, layer
   plans, the exporter's source hand-off and the toolbar's dimming. `tsc`, eslint, prettier and a
   Vite build pass. Rust is untouched.
+
+## ADR-039: Interface language: English and Turkish, with no new dependency
+
+- **Status:** implemented (2026-11-21). Unit tests (vitest, cargo) pass on macOS Apple silicon;
+  the Turkish interface was not yet reviewed by a native speaker on every screen, the native
+  recording indicator panel's width with the longer Turkish text was not seen, and Windows was not
+  compiled locally.
+- **Context:** the interface was English only. A Turkish user asked for it; more languages may follow.
+- **Decision:** two languages, `en` and `tr`. The stored setting (`language` in `settings.json`) is
+  absent (follow the system), `en` or `tr`. Rust owns it: `i18n.rs` resolves it (macOS
+  `NSLocale.preferredLanguages`, first entry Turkish means Turkish), keeps the current language in
+  an atomic, and exposes `language_get` / `language_set`. A change is stored, applied, relabels the
+  tray and is announced with `language-changed`. Every page asks before its first paint, so no
+  window shows the wrong language, and re-renders its tree when told of a change (no remount, so an
+  open overlay keeps its state). The main window has a **Language** row (System default, English,
+  Türkçe).
+- **Where the text lives:** in Rust, an English/Turkish pair at the place of use (`tr!`), so the
+  pair stays together and no key can be missing. In the page, one catalogue per area
+  (`locales/{app,overlay,recording}.{en,tr}.ts`) with `{name}` parameters; the Turkish record type
+  is derived from the English one, so a missing message fails `tsc`, and `i18n.test.ts` checks that
+  both languages use the same parameters. Both rejected alternatives add weight for two languages:
+  an i18n library (a dependency, against the minimal-dependency rule) and a single JSON shared by
+  Rust and the page (a build step and a way for the two sides to drift).
+- **Not translated:** log lines, error codes the page compares, the product name, file formats,
+  and the macOS microphone usage text in `Info.plist` (shown by the system; a `tr.lproj` bundle
+  would be needed). README and the documents stay English. Messages already on screen keep the
+  language they were created in until replaced.
+- **Turkish wording:** "alan" (not "bölge") for a screen region, as in "Alanı Yakala" and
+  "Alan Kaydı Başlat" (user decision). Decimal comma for sizes (`4,2 MB`).
+- **Verification:** `tsc`, eslint, prettier, 332 vitest tests and 196 cargo tests, all in English
+  except the Turkish tests for the main window, toolbar, review window and size formatting. The
+  language is a process-wide atomic in Rust, so Rust tests do not set Turkish; Rust Turkish text is
+  unchecked by tests.

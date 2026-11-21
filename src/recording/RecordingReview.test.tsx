@@ -2,6 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setLanguage } from "../i18n";
 import type { RecordingStatus } from "../ipc";
 
 const ipc = vi.hoisted(() => ({
@@ -85,6 +86,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  setLanguage("en");
   act(() => root.unmount());
   container.remove();
 });
@@ -178,5 +180,15 @@ describe("recording review", () => {
   it("tells the user a recording in progress is stopped from the menu bar", async () => {
     await render(finished({ phase: "recording", id: 8 }));
     expect(container.textContent).toContain("Stop it from the menu bar");
+  });
+
+  it("speaks Turkish when the language is Turkish", async () => {
+    setLanguage("tr");
+    await render(finished({ systemAudio: true }));
+    const text = container.textContent ?? "";
+    expect(text).toContain("1,2 MB");
+    expect(text).toContain("Sistem sesi");
+    expect(button("Kaydet").disabled).toBe(false);
+    expect(button("At").disabled).toBe(false);
   });
 });

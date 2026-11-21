@@ -8,6 +8,7 @@ use tauri::{
     tray::{MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 
+use crate::i18n::tr;
 use crate::login_item;
 use crate::recording;
 
@@ -17,10 +18,12 @@ use crate::recording;
 #[cfg(any(target_os = "macos", test))]
 const TEMPLATE_ICON: &[u8] = include_bytes!("../icons/tray-template.png");
 
-#[cfg(target_os = "macos")]
-const EXIT_LABEL: &str = "Quit Snipvero";
-#[cfg(not(target_os = "macos"))]
-const EXIT_LABEL: &str = "Exit";
+fn exit_label() -> &'static str {
+    #[cfg(target_os = "macos")]
+    return tr!("Quit Snipvero", "Snipvero'dan Çık");
+    #[cfg(not(target_os = "macos"))]
+    tr!("Exit", "Çıkış")
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrayAction {
@@ -63,6 +66,9 @@ fn menu(open_at_login: bool) -> Vec<Entry> {
 /// The recording row, whose label and availability follow the recording's phase.
 struct RecordItem(MenuItem<Wry>);
 
+/// The other plain rows, kept so a language change can relabel them (ADR-039).
+struct PlainItems(Vec<(TrayAction, MenuItem<Wry>)>);
+
 /// The checkable **Open at Login** item, kept to show the OS's current state (ADR-033).
 struct OpenAtLoginItem {
     item: CheckMenuItem<Wry>,
@@ -99,19 +105,20 @@ impl TrayAction {
 
     fn label(self) -> &'static str {
         match self {
-            TrayAction::Capture => "Capture",
+            TrayAction::Capture => tr!("Capture", "Yakala"),
             TrayAction::Record => recording::menu_entry(recording::Phase::Idle).0,
-            TrayAction::Open => "Open Snipvero",
-            TrayAction::OpenAtLogin => "Open at Login",
-            TrayAction::About => "About Snipvero",
-            TrayAction::CheckForUpdates => "Check for Updates…",
-            TrayAction::Exit => EXIT_LABEL,
+            TrayAction::Open => tr!("Open Snipvero", "Snipvero'yu Aç"),
+            TrayAction::OpenAtLogin => tr!("Open at Login", "Girişte Aç"),
+            TrayAction::About => tr!("About Snipvero", "Snipvero Hakkında"),
+            TrayAction::CheckForUpdates => tr!("Check for Updates…", "Güncellemeleri Denetle…"),
+            TrayAction::Exit => exit_label(),
         }
     }
 }
 
 pub fn create(app: &AppHandle) -> tauri::Result<()> {
     let menu = Menu::new(app)?;
+    let mut plain = Vec::new();
     for entry in self::menu(login_item::SUPPORTED) {
         match entry {
             Entry::Item(TrayAction::OpenAtLogin) => {
@@ -136,12 +143,15 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                 menu.append(&item)?;
                 if action == TrayAction::Record {
                     app.manage(RecordItem(item));
+                } else {
+                    plain.push((action, item));
                 }
             }
             Entry::Separator => menu.append(&PredefinedMenuItem::separator(app)?)?,
         }
     }
 
+    app.manage(PlainItems(plain));
     let mut builder = TrayIconBuilder::with_id("main")
         .tooltip("Snipvero")
         .menu(&menu)
@@ -167,6 +177,24 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     }
     builder.build(app)?;
     Ok(())
+}
+
+/// Writes every row's label again in the current language (ADR-039). Safe from any thread.
+pub fn relabel(app: &AppHandle) {
+    if let Some(items) = app.try_state::<PlainItems>() {
+        for (action, item) in &items.0 {
+            if let Err(err) = item.set_text(action.label()) {
+                eprintln!("[tray] relabel: {err}");
+            }
+        }
+    }
+    if let Some(item) = app.try_state::<OpenAtLoginItem>()
+        && let Err(err) = item.item.set_text(TrayAction::OpenAtLogin.label())
+    {
+        eprintln!("[tray] relabel: {err}");
+    }
+    let (phase, elapsed) = recording::tray_phase(app);
+    show_recording(app, phase, elapsed);
 }
 
 /// Shows the recording's phase in the tray: the row's label (Stop Recording while it runs) and,
@@ -273,7 +301,7 @@ fn decode_rgba(bytes: &[u8]) -> Result<tauri::image::Image<'static>, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{EXIT_LABEL, Entry, TEMPLATE_ICON, TrayAction, decode_rgba, menu, refreshes_on};
+    use super::{Entry, TEMPLATE_ICON, TrayAction, decode_rgba, exit_label, menu, refreshes_on};
 
     fn labels(entries: &[Entry]) -> Vec<&'static str> {
         entries
@@ -306,7 +334,7 @@ mod tests {
                 "---",
                 "About Snipvero",
                 "Check for Updates…",
-                EXIT_LABEL
+                exit_label()
             ]
         );
         for action in TrayAction::ALL {
@@ -329,7 +357,7 @@ mod tests {
                 "---",
                 "About Snipvero",
                 "Check for Updates…",
-                EXIT_LABEL
+                exit_label()
             ]
         );
     }

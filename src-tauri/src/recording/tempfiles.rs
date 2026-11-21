@@ -36,6 +36,8 @@ fn nonce() -> String {
 
 /// Creates one directory, private to the user, failing if it already exists.
 fn create_private(path: &Path) -> io::Result<()> {
+    // `mut` is only needed where the mode can be set (Unix); Windows clippy rejects it otherwise.
+    #[cfg_attr(not(unix), allow(unused_mut))]
     let mut builder = fs::DirBuilder::new();
     #[cfg(unix)]
     {

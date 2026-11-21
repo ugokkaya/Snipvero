@@ -18,6 +18,7 @@ use objc2_app_kit::{
 use objc2_foundation::{NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString};
 
 use crate::geometry::{LogicalRect, PixelRect, countdown_layout, recording_layout};
+use crate::i18n::tr;
 
 struct Indicator {
     session: u64,
@@ -79,6 +80,13 @@ fn rect(rect: LogicalRect, height: f64) -> NSRect {
 const COUNTDOWN: (f64, f64, f64) = (0.39, 0.40, 0.95);
 const RECORDING: (f64, f64, f64) = (0.92, 0.22, 0.22);
 
+fn countdown_text(seconds: u64) -> String {
+    tr!(
+        format!("Capture in {seconds}s"),
+        format!("{seconds} sn içinde yakalanacak")
+    )
+}
+
 pub fn show_countdown(
     session: u64,
     bounds: LogicalRect,
@@ -91,7 +99,7 @@ pub fn show_countdown(
         bounds,
         region,
         frame,
-        &format!("Capture in {seconds}s"),
+        &countdown_text(seconds),
         COUNTDOWN,
     )
 }
@@ -136,7 +144,7 @@ pub fn show_or_update_recording(
     // SAFETY: `stop:` is implemented by `StopTarget`, which the strip keeps alive.
     let button = unsafe {
         NSButton::buttonWithTitle_target_action(
-            &NSString::from_str("Stop"),
+            &NSString::from_str(tr!("Stop", "Durdur")),
             Some(&target),
             Some(sel!(stop:)),
             mtm,
@@ -383,7 +391,7 @@ pub fn update_countdown(session: u64, seconds: u64, bright: bool) {
         if let Some(indicator) = current.as_ref().filter(|i| i.session == session) {
             indicator
                 .label
-                .setStringValue(&NSString::from_str(&format!("Capture in {seconds}s")));
+                .setStringValue(&NSString::from_str(&countdown_text(seconds)));
             // Only the border pulses; the countdown stays legible and the live app stays clear.
             indicator
                 .border

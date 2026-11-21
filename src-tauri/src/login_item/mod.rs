@@ -4,6 +4,9 @@
 #[cfg(target_os = "macos")]
 mod macos;
 
+#[cfg(not(target_os = "macos"))]
+use crate::i18n::tr;
+
 /// Whether this platform can open Snipvero at login.
 pub const SUPPORTED: bool = cfg!(target_os = "macos");
 
@@ -23,7 +26,11 @@ pub fn set_enabled(enabled: bool) -> Result<(), String> {
     #[cfg(not(target_os = "macos"))]
     {
         let _ = enabled;
-        Err("opening at login is not supported on this platform".into())
+        Err(tr!(
+            "opening at login is not supported on this platform",
+            "oturum açılışında açma bu platformda desteklenmiyor"
+        )
+        .into())
     }
 }
 

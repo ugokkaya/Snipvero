@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { setLanguage } from "./i18n";
 import { SHORTCUT_REJECTIONS } from "./ipc";
 import { DEFAULT_ACCELERATOR, acceleratorFromKey, isCancel, rejectionMessage } from "./shortcut";
 
@@ -83,5 +84,17 @@ describe("rejectionMessage", () => {
     expect(rejectionMessage("modifiers", "windows")).toContain(
       "Print Screen can be used on its own",
     );
+  });
+});
+
+describe("rejectionMessage in Turkish", () => {
+  afterEach(() => setLanguage("en"));
+
+  it("keeps the platform-specific wording", () => {
+    setLanguage("tr");
+    expect(rejectionMessage("modifiers", "macos")).toContain("⌘⇧ veya ⌃⌥");
+    expect(rejectionMessage("modifiers", "macos")).toContain("F13");
+    expect(rejectionMessage("modifiers", "windows")).toContain("Ctrl+Shift veya Ctrl+Alt");
+    expect(rejectionMessage("modifiers", "windows")).not.toContain("F13");
   });
 });

@@ -4,6 +4,7 @@ mod devtools;
 mod events;
 mod export;
 mod geometry;
+mod i18n;
 mod login_item;
 mod overlay;
 mod recording;
@@ -58,6 +59,8 @@ pub fn run() {
             recording::recording_gif_plan,
             recording::recording_export_gif,
             recording::recording_cancel_gif_export,
+            i18n::language_get,
+            i18n::language_set,
             app_status,
             start_recording,
             app_info,
@@ -76,6 +79,7 @@ pub fn run() {
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            i18n::init(app.handle());
             tray::create(app.handle())?;
             shortcut::register_saved(app.handle());
             overlay::precreate_in_background(app.handle());

@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { setLanguage } from "../i18n";
 import { formatBytes, formatClock, recordingFileName } from "./format";
 
 describe("formatClock", () => {
@@ -28,5 +29,14 @@ describe("recordingFileName", () => {
     expect(name).toBe("Snipvero-2026-10-05-040302.mp4");
     // The same rule Rust applies (`export::valid_file_name_with`).
     expect(name).toMatch(/^[A-Za-z0-9_.-]+\.mp4$/);
+  });
+});
+
+describe("formatBytes in Turkish", () => {
+  afterEach(() => setLanguage("en"));
+  it("uses a decimal comma", () => {
+    setLanguage("tr");
+    expect(formatBytes(4_200_000)).toBe("4,2 MB");
+    expect(formatBytes(512)).toBe("512 B");
   });
 });

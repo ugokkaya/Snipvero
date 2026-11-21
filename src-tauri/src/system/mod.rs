@@ -1,6 +1,9 @@
 //! Small OS integrations outside capture itself: the frontmost app (for focus restoration) and
 //! the Screen Recording settings page. No-ops where an OS has no equivalent yet.
 
+#[cfg(not(target_os = "macos"))]
+use crate::i18n::tr;
+
 #[cfg(target_os = "macos")]
 mod macos;
 
@@ -28,7 +31,11 @@ pub fn open_screen_recording_settings() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     return macos::open_screen_recording_settings();
     #[cfg(not(target_os = "macos"))]
-    Err("there is no screen recording permission page on this platform".into())
+    Err(tr!(
+        "there is no screen recording permission page on this platform",
+        "bu platformda ekran kaydı izni sayfası yok"
+    )
+    .into())
 }
 
 /// Opens the OS page where microphone permission is granted.
@@ -36,7 +43,11 @@ pub fn open_microphone_settings() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     return macos::open_microphone_settings();
     #[cfg(not(target_os = "macos"))]
-    Err("there is no microphone permission page on this platform".into())
+    Err(tr!(
+        "there is no microphone permission page on this platform",
+        "bu platformda mikrofon izni sayfası yok"
+    )
+    .into())
 }
 
 /// Opens a web page in the default browser. Callers pass fixed addresses only (ADR-024).
@@ -46,7 +57,11 @@ pub fn open_url(url: &str) -> Result<(), String> {
     #[cfg(not(target_os = "macos"))]
     {
         let _ = url;
-        Err("opening links is not implemented on this platform yet".into())
+        Err(tr!(
+            "opening links is not implemented on this platform yet",
+            "bağlantı açma bu platformda henüz desteklenmiyor"
+        )
+        .into())
     }
 }
 
@@ -57,6 +72,10 @@ pub fn open_file(path: &std::path::Path) -> Result<(), String> {
     #[cfg(not(target_os = "macos"))]
     {
         let _ = path;
-        Err("opening files is not implemented on this platform yet".into())
+        Err(tr!(
+            "opening files is not implemented on this platform yet",
+            "dosya açma bu platformda henüz desteklenmiyor"
+        )
+        .into())
     }
 }

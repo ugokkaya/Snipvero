@@ -47,6 +47,7 @@ pub use self::reader::read_pictures;
 use super::mixer::{SAMPLE_RATE, Source};
 use super::{Finalized, RecordingError, StartRequest};
 use crate::capture::{self, PIXEL_FORMAT_BGRA};
+use crate::i18n::tr;
 
 pub const SUPPORTED: bool = true;
 
@@ -166,7 +167,7 @@ impl Shared {
     fn writer_error(&self) -> String {
         // SAFETY: a plain property read.
         unsafe { self.writer.error() }.map_or_else(
-            || "the video encoder stopped".to_string(),
+            || tr!("the video encoder stopped", "video kodlayıcı durdu").to_string(),
             |error| error.localizedDescription().to_string(),
         )
     }
@@ -395,7 +396,13 @@ pub fn start(request: StartRequest) -> Result<Recorder, RecordingError> {
         .iter()
         .find(|display| unsafe { display.displayID() } == request.display_id)
         .ok_or_else(|| {
-            RecordingError::Refused("The display is no longer available. Please try again.".into())
+            RecordingError::Refused(
+                tr!(
+                    "The display is no longer available. Please try again.",
+                    "Ekran artık kullanılamıyor. Lütfen yeniden deneyin."
+                )
+                .into(),
+            )
         })?;
     // Snipvero's own windows (overlays, the indicator, the review window) stay out of the video.
     let excluded = capture::own_applications(&content);
@@ -461,7 +468,11 @@ pub fn start(request: StartRequest) -> Result<Recorder, RecordingError> {
         input.setExpectsMediaDataInRealTime(true);
         if !writer.canAddInput(&input) {
             return Err(RecordingError::Failed(
-                "the video encoder does not accept these settings".into(),
+                tr!(
+                    "the video encoder does not accept these settings",
+                    "video kodlayıcı bu ayarları kabul etmiyor"
+                )
+                .into(),
             ));
         }
         writer.addInput(&input);
@@ -479,7 +490,11 @@ pub fn start(request: StartRequest) -> Result<Recorder, RecordingError> {
             input.setExpectsMediaDataInRealTime(true);
             if !writer.canAddInput(&input) {
                 return Err(RecordingError::Failed(
-                    "the audio encoder does not accept these settings".into(),
+                    tr!(
+                        "the audio encoder does not accept these settings",
+                        "ses kodlayıcı bu ayarları kabul etmiyor"
+                    )
+                    .into(),
                 ));
             }
             writer.addInput(&input);
@@ -491,7 +506,13 @@ pub fn start(request: StartRequest) -> Result<Recorder, RecordingError> {
     unsafe {
         if !writer.startWriting() {
             return Err(RecordingError::Failed(writer.error().map_or_else(
-                || "the video file could not be opened".into(),
+                || {
+                    tr!(
+                        "the video file could not be opened",
+                        "video dosyası açılamadı"
+                    )
+                    .into()
+                },
                 |error| error_text(&error),
             )));
         }
@@ -583,7 +604,11 @@ pub fn start(request: StartRequest) -> Result<Recorder, RecordingError> {
         Err(_) => {
             native.discard();
             Err(RecordingError::Failed(
-                "timed out starting the capture".into(),
+                tr!(
+                    "timed out starting the capture",
+                    "yakalamanın başlatılması zaman aşımına uğradı"
+                )
+                .into(),
             ))
         }
     }
@@ -703,7 +728,11 @@ impl Recorder {
         unsafe { shared.writer.finishWritingWithCompletionHandler(&handler) };
         if wait.recv_timeout(FINISH_TIMEOUT).is_err() {
             return Err(RecordingError::Failed(
-                "timed out finishing the video file".into(),
+                tr!(
+                    "timed out finishing the video file",
+                    "video dosyasının tamamlanması zaman aşımına uğradı"
+                )
+                .into(),
             ));
         }
         // SAFETY: a plain property read.
@@ -718,9 +747,12 @@ impl Recorder {
         let seconds = unsafe { end.seconds() - first.seconds() };
         eprintln!("[recording] {frames} frames written, {dropped} dropped, {seconds:.1} s");
         let mut notices = shared.audio.as_ref().map_or_else(Vec::new, |a| a.notices());
-        notices.extend(
-            audio_failure.map(|reason| format!("The sound could not be completed: {reason}.")),
-        );
+        notices.extend(audio_failure.map(|reason| {
+            tr!(
+                format!("The sound could not be completed: {reason}."),
+                format!("Ses tamamlanamadı: {reason}.")
+            )
+        }));
         Ok(Finalized {
             duration: Duration::from_secs_f64(seconds.max(0.0)),
             notices,

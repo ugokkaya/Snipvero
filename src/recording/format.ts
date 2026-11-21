@@ -1,4 +1,5 @@
-// Pure formatting for the recording review window.
+// Formatting for the recording review window.
+import { getLanguage } from "../i18n";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -18,7 +19,9 @@ export function formatBytes(bytes: number): string {
     value /= 1000;
     unit += 1;
   }
-  return `${value >= 100 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`;
+  const digits = value >= 100 ? value.toFixed(0) : value.toFixed(1);
+  // Turkish writes the decimal separator as a comma.
+  return `${getLanguage() === "tr" ? digits.replace(".", ",") : digits} ${units[unit]}`;
 }
 
 /** Suggested file name in local time, for example `Snipvero-2026-10-30-143000.mp4`. */

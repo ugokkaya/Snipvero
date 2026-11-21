@@ -3,6 +3,7 @@
 import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import type { Language } from "./i18n";
 import type { Rect } from "./overlay/coords";
 
 export const CAPTURE_FAILED = "capture-failed";
@@ -11,6 +12,7 @@ export const OVERLAY_SELECTION_CLEARED = "overlay-selection-cleared";
 export const OVERLAY_LABEL_PREFIX = "overlay-";
 export const ABOUT_LABEL = "about";
 export const UPDATE_CHECK_REQUESTED = "update-check-requested";
+export const LANGUAGE_CHANGED = "language-changed";
 export const RECORDING_STATE = "recording-state";
 export const RECORDING_FAILED = "recording-failed";
 export const RECORDING_EXPORT_PROGRESS = "recording-export-progress";
@@ -49,6 +51,21 @@ export interface AppStatus {
   captureSupported: boolean;
   screenRecordingAllowed: boolean;
   shortcut: ShortcutStatus | null;
+}
+
+/** `setting` is what the user chose (`null`: follow the system); `language` is what applies now. */
+export interface LanguageInfo {
+  language: Language;
+  setting: Language | null;
+}
+
+export const languageGet = () => invoke<LanguageInfo>("language_get");
+
+export const languageSet = (setting: Language | null) =>
+  invoke<LanguageInfo>("language_set", { setting });
+
+export function onLanguageChanged(handler: (language: Language) => void): Promise<UnlistenFn> {
+  return listen<Language>(LANGUAGE_CHANGED, (event) => handler(event.payload));
 }
 
 export function onCaptureFailed(handler: (message: string) => void): Promise<UnlistenFn> {

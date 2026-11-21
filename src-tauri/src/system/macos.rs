@@ -5,6 +5,7 @@ use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication, NSWork
 use objc2_foundation::{NSString, NSURL};
 
 use super::AppId;
+use crate::i18n::tr;
 
 const SCREEN_RECORDING_SETTINGS: &str =
     "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture";
@@ -28,27 +29,45 @@ pub fn activate_app(pid: AppId) {
 pub fn open_screen_recording_settings() -> Result<(), String> {
     let url = NSURL::URLWithString(&NSString::from_str(SCREEN_RECORDING_SETTINGS))
         .ok_or("invalid settings URL")?;
-    open(&url, "System Settings could not be opened")
+    open(
+        &url,
+        tr!(
+            "System Settings could not be opened",
+            "Sistem Ayarları açılamadı"
+        ),
+    )
 }
 
 pub fn open_microphone_settings() -> Result<(), String> {
     let url = NSURL::URLWithString(&NSString::from_str(MICROPHONE_SETTINGS))
         .ok_or("invalid settings URL")?;
-    open(&url, "System Settings could not be opened")
+    open(
+        &url,
+        tr!(
+            "System Settings could not be opened",
+            "Sistem Ayarları açılamadı"
+        ),
+    )
 }
 
 pub fn open_url(url: &str) -> Result<(), String> {
     let url = NSURL::URLWithString(&NSString::from_str(url)).ok_or("invalid URL")?;
-    open(&url, "the link could not be opened")
+    open(
+        &url,
+        tr!("the link could not be opened", "bağlantı açılamadı"),
+    )
 }
 
 pub fn open_file(path: &Path) -> Result<(), String> {
     if !path.is_file() {
-        return Err(format!("{} not found", path.display()));
+        return Err(tr!(
+            format!("{} not found", path.display()),
+            format!("{} bulunamadı", path.display())
+        ));
     }
     let path = path.to_str().ok_or("file path is not valid UTF-8")?;
     let url = NSURL::fileURLWithPath(&NSString::from_str(path));
-    open(&url, "the file could not be opened")
+    open(&url, tr!("the file could not be opened", "dosya açılamadı"))
 }
 
 fn open(url: &Retained<NSURL>, error: &str) -> Result<(), String> {

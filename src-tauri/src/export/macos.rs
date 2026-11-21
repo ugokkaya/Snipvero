@@ -10,6 +10,7 @@ use objc2_app_kit::{
 use objc2_foundation::{NSArray, NSData};
 
 use super::{Image, encode_png};
+use crate::i18n::tr;
 
 pub fn copy_image(image: &Image) -> Result<(), String> {
     copy_image_to(&NSPasteboard::generalPasteboard(), image)
@@ -58,19 +59,30 @@ fn write_image(pasteboard: &NSPasteboard, image: &Image) -> Result<(), String> {
     let png = NSData::with_bytes(&encode_png(image, png::Compression::Fast)?);
     let tiff = NSBitmapImageRep::imageRepWithData(&png)
         .and_then(|rep| rep.TIFFRepresentation())
-        .ok_or("could not convert the image for the clipboard")?;
+        .ok_or(tr!(
+            "could not convert the image for the clipboard",
+            "görüntü pano için dönüştürülemedi"
+        ))?;
     let item = NSPasteboardItem::new();
     // SAFETY: AppKit's pasteboard type constants are immutable NSString statics.
     let (png_type, tiff_type) = unsafe { (NSPasteboardTypePNG, NSPasteboardTypeTIFF) };
     if !item.setData_forType(&png, png_type) || !item.setData_forType(&tiff, tiff_type) {
-        return Err("could not prepare the clipboard item".into());
+        return Err(tr!(
+            "could not prepare the clipboard item",
+            "pano öğesi hazırlanamadı"
+        )
+        .into());
     }
     pasteboard.clearContents();
     let items = NSArray::from_retained_slice(&[ProtocolObject::from_retained(item)]);
     if pasteboard.writeObjects(&items) {
         Ok(())
     } else {
-        Err("the clipboard rejected the image".into())
+        Err(tr!(
+            "the clipboard rejected the image",
+            "pano görüntüyü kabul etmedi"
+        )
+        .into())
     }
 }
 

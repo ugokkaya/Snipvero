@@ -10,7 +10,7 @@ then, it needs `MACOS_SIGNING_ENABLED=true`; manual runs default to artifacts on
 No workflow creates certificates or changes repository settings.
 The existing `v0.1.0-beta.1` download remains the original ad-hoc build; do not replace its assets.
 `0.1.0-beta.2` to `0.1.0-beta.9` are published.
-The current source version is `0.1.0-beta.9` (build 9), fixing invisible capture-toolbar tooltips.
+The current source version is `0.2.0-beta.1` (build 10), not yet published: screen recording (video, audio, GIF) and the Turkish interface. The last published version is `0.1.0-beta.9` (build 9).
 The maintainer reported the tooltip fix working in the local development-signed build on
 November 15, 2026, and authorized publication. This does not establish exhaustive mixed-display
 or notarized-candidate runtime QA. Beta 8 added five-second region recapture with a blinking
@@ -90,7 +90,7 @@ function keys remain rejected.
 
 There are two version numbers, because Apple's bundle fields accept integers only (ADR-022).
 
-**Package version** `0.1.0-beta.9` (SemVer pre-release, never with `+build` metadata: the updater
+**Package version** `0.2.0-beta.1` (SemVer pre-release, never with `+build` metadata: the updater
 ignores it when ordering versions, so a rebuild needs a new version). It lives in three manifests, and
 `manifest_versions_match` (Rust test) fails if they differ:
 

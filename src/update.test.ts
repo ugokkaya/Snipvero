@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { setLanguage } from "./i18n";
 import { UPDATE_FAILURES, updateFailure } from "./ipc";
 import {
   IDLE,
@@ -106,4 +107,14 @@ it("formats download sizes", () => {
   expect(formatBytes(0)).toBe("0 KB");
   expect(formatBytes(420_000)).toBe("420 KB");
   expect(formatBytes(2_670_768)).toBe("2.7 MB");
+});
+
+describe("Turkish", () => {
+  afterEach(() => setLanguage("en"));
+
+  it("words failures and sizes in Turkish", () => {
+    setLanguage("tr");
+    expect(failureMessage("cancelled")).toBe("İndirme iptal edildi.");
+    expect(formatBytes(2_670_768)).toBe("2,7 MB");
+  });
 });
