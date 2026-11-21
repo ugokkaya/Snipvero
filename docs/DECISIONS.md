@@ -331,7 +331,8 @@ Lightweight ADRs. Newest last. Do not rewrite accepted entries: supersede them w
 ## ADR-020: macOS beta packaging, version scheme and icons
 
 - **Status:** accepted (2026-10-31). Verified on macOS only. The `CFBundleShortVersionString`
-  part of **Version** is superseded by ADR-022.
+  part of **Version** is superseded by ADR-022. The "no entitlements" rule is replaced by the one
+  `com.apple.security.device.audio-input` entitlement of ADR-037.
 - **Scope (user decision):** macOS is the only platform of the beta; Windows stays in CI (NSIS
   smoke bundle) and is presented as planned. Public text describes Snipvero on its own terms,
   without comparisons with other tools.
@@ -874,7 +875,443 @@ at five seconds for this release. This supersedes the pending basic feature QA n
 does not claim exhaustive mixed-DPI/display-change/keyboard coverage, clean-Mac installation,
 Homebrew installation, Windows runtime support or runtime QA of the notarized distribution candidate.
 
-## ADR-037: Fill, Blur and Highlight tools; mosaic computed in the page
+## ADR-037: Screen recording: one pipeline, MP4 first, GIF as an export
+
+- **Status:** proposed (2026-11-16); **task 2 (silent MP4 recording on macOS) implemented and partly verified
+  on macOS only** (see "Task 2 outcome" below for what was measured and what was not). **Task 3 (optional audio) implemented
+  on macOS; system audio and the entitlement behaviour measured, the microphone path built but not run against a granted
+  microphone** (see "Task 3 outcome"). **Task 4 (GIF export) implemented on macOS; the crate, the decoder, the timing and the encoder were measured
+  against real recordings, the save dialog, the progress events and the review-window panel were not driven by hand** (see "Task 4 outcome"). The API facts below come from the `objc2-*`
+  0.3.2 bindings in the local registry and Apple's documentation. macOS is the target; Windows must keep compiling
+  (unsupported stubs, type-checked against the shared code but not built on Windows).
+- **Context:** the user asked for screen recording. Decisions already taken with the user:
+  one recording pipeline; MP4 (H.264) first; GIF is an export of a finished recording, never a
+  separate direct-record mode; system audio and microphone are optional, separately toggled and
+  off by default (no permission prompt while off); no annotations on video in this version;
+  recordings go to a temporary file with a duration cap; Windows only compiles; macOS uses
+  ScreenCaptureKit and AVFoundation, preferring no new dependency.
+
+### Scope and product behaviour
+
+- A recording captures one rectangular region of one display, chosen with the existing overlay
+  (FR-3 selection, frame pixels). The overlay closes before the first frame is requested, so
+  the selection UI is never in the video. Snipvero's own windows are excluded from the stream
+  (as in ADR-008), except the small native recording indicator, which is excluded from the
+  content filter too (the user sees it, the video does not).
+- States: `idle → starting → recording → stopping → finished` (or `failed`/`cancelled`). One
+  recording at a time; it is mutually exclusive with a capture session and an update install
+  (the same lock as ADR-035/FR-14.5). A finished recording is a temp MP4 that the user can
+  **Save…** (NSSavePanel, as ADR-018), **Export as GIF…**, or **Discard**.
+- Stopping: the tray item turns into **Stop Recording**, the capture shortcut stops it
+  (as ADR-034), and the duration cap stops it. Escape in the review window discards nothing; only **Discard**,
+  **Save** or quitting ends the temp file.
+- No new settings in the first version except the two audio toggles and the cap's default, kept
+  in the existing `settings.json` (ADR-030) with the same atomic writes. Defaults: both audio off, 300 s.
+
+### Storage: temp file instead of memory (exception to the in-memory rule)
+
+- **Rule being amended:** AGENTS.md and ADR-019 say screenshots stay in memory until the user
+  copies or saves them. A video cannot: 5 minutes of 1080p at 60 fps is ~18 000 frames; held raw
+  (BGRA, 8 MB each) that is >100 GB, and even encoded MP4 should not be buffered in the heap
+  for minutes. `AVAssetWriter` also writes to a file URL, not to a buffer.
+- **Decision:** the encoder writes `snipvero-recording-<random>.mp4` into a **private
+  per-launch directory** `<NSTemporaryDirectory>/com.snipvero.app/recordings-<pid>-<nonce>/`,
+  created with mode `0700` and exclusively (`create_dir`, never reused), under the per-user
+  temp directory macOS already gives each user (not `/tmp`). The file is never
+  uploaded, never opened by another program and never referenced by the page (the page receives only
+  an opaque recording id, not a path; Save and GIF export run in Rust).
+- **Lifetime:** deleted on Cancel/Discard, after a successful Save (the saved copy is separate),
+  after a failed start, on normal quit (`RunEvent::Exit`), and on the next launch (stale
+  `recordings-*` directories older than this process are removed at startup, covering crashes
+  and force-quit). Delete failures are logged, never silently kept as "success".
+  A finished-but-unsaved recording survives only until the app exits.
+- **Disk space:** before starting, require free space for the cap at the chosen bitrate plus 20 %
+  headroom (`volume available capacity for important usage`, via `NSURL resourceValues`); refuse
+  with a message otherwise. A write failure mid-recording stops it and keeps what was written
+  if the file finalizes, otherwise discards it with an error.
+- **Privacy statement for docs:** "Screenshots stay in memory"; "recordings are written only to
+  a private temporary file, deleted when you discard, save, quit, or at next launch". No telemetry, no network.
+
+### Cap
+
+- **Duration:** default 300 s, hard maximum 600 s in the first version (a constant in `recording/mod.rs`; the setting
+  is clamped to 10..=600 s). At the cap the recording stops by itself as a normal stop (the file is
+  finalized and valid), and the user gets a notice "stopped at the maximum length". A monotonic
+  deadline on the worker (as in ADR-035) enforces it, not wall-clock time and not the frame count.
+- **Size:** enforced by construction rather than by polling: capped bitrate × capped duration.
+  Video bitrate is derived from the pixel count and frame rate (~0.1 bit per pixel per frame, clamped
+  to 2..=20 Mbit/s), giving at most 750 MB at the extremes; a cheap guard also stops the recording
+  if the file exceeds 1 GiB. No GIF-style size limits apply to the MP4.
+- **Frame size/rate:** output dimensions are the region in physical pixels rounded down to even
+  numbers (H.264 4:2:0 requires it); regions that exceed the H.264 level limit, or are smaller than 16 px, are refused with a message.
+  30 fps by default (`minimumFrameInterval` 1/30 s); no 60 fps option in the first version.
+  Cursor is shown (`showsCursor = true`), no click highlights.
+
+### Frame source and encoder (macOS), and why no new framework crate beyond the objc2 family
+
+- **Frame source:** `SCStream` with an `SCContentFilter` for the display (excluding Snipvero
+  windows) and `SCStreamConfiguration`: `sourceRect` = the region in **display points**, `width`/`height` = the even
+  output size in pixels, `pixelFormat = 'BGRA'` (or 420v if measured cheaper; decided in task 2),
+  `queueDepth = 5`, `showsCursor = true`. The region is converted from frame pixels to points by the existing pure geometry
+  module; no second scale-factor model (AGENTS.md HiDPI rule). An `SCStreamOutput`
+  delegate (declared with `objc2::define_class!`, as the countdown panel does for its views) receives `CMSampleBuffer`s on a private serial
+  dispatch queue and appends them to the writer. Only frames whose `SCStreamFrameInfoStatus` is `Complete` are appended (idle/blank
+  frames are skipped; the writer's timeline uses the sample's presentation time, so static screens produce a valid, short-sample-count file).
+- **Encoder:** `AVAssetWriter` (file type `mp4`) with an `AVAssetWriterInput` for video
+  (`AVVideoCodecTypeH264`, `AVVideoProfileLevelH264HighAutoLevel`, bitrate from above, `expectedSourceFrameRate`)
+  and `expectsMediaDataInRealTime = true`. VideoToolbox hardware H.264 is used by AVFoundation
+  itself, so there is no own encoder, no ffmpeg and no libx264 (GPL/patent concerns, size, ADR-005).
+  `movieFragmentInterval` is left default: the moov atom is written at `finishWriting`, so a crash leaves an
+  unplayable temp file, which is acceptable because crash files are deleted at next launch anyway.
+- **Rejected:**
+  - `SCRecordingOutput` (macOS 15+): writes MP4 itself and even mixes the microphone, but is unavailable on our
+    macOS 14 minimum (`minimumSystemVersion` 14.0, ADR-022). A second path for 15+ would double testing for no
+    user benefit. Revisit if the minimum moves to 15.
+  - `CGDisplayStream`: deprecated, no audio.
+  - ffmpeg or any bundled encoder / `openh264`/`x264` crates: licenses (GPL/BSD with patent
+    pool terms), binary size, and AVFoundation already encodes in hardware.
+  - Capturing frames with `SCScreenshotManager` in a loop: no hardware path, no audio, wrong timing.
+- **Dependencies:** needs the **same objc2 family** the tree already uses, enabled for the first
+  time: `objc2-av-foundation` (AVAssetWriter, AVAssetWriterInput, AVCaptureDevice/Session for the
+  microphone, AVMediaType, AVVideoSettings keys), `objc2-core-media` (`CMSampleBuffer`, `CMTime`),
+  and, if the sample-buffer accessors need them, `objc2-core-video` (`CVPixelBuffer`) and
+  `objc2-core-audio-types` (`AudioStreamBasicDescription`). All 0.3.x, `Zlib OR Apache-2.0 OR MIT`, same maintainers
+  and generator as `objc2-screen-capture-kit` (ADR-008), versions already in the local registry, **default features off** with
+  only the feature names the code needs (as in `Cargo.toml` today). Justification (one line for the PR): "typed bindings
+  to AVAssetWriter and CMSampleBuffer for the MP4 encoder; the alternative is hand-written `extern "C"`/`msg_send!` for
+  dozens of selectors, which is less safe and more code". `objc2-screen-capture-kit` gains `SCStreamConfiguration`, `SCStreamOutput`
+  (its existing `SCStream` feature may already include them; check) plus its optional `objc2-core-media` /
+  `objc2-av-foundation` features. `pnpm notices` regenerates `THIRD_PARTY_NOTICES.txt`; the objc2 licence texts in
+  `scripts/licenses/` already apply. **No non-objc2 crate is added for video.**
+
+### Audio
+
+- **Both sources off by default and independent.** With both off, no `captureAudio`,
+  no `AVCaptureDevice` is created and nothing touches the microphone permission or Info.plist keys at runtime.
+  The first enabling of a toggle is when a prompt can appear.
+- **System audio (macOS 14+):** `SCStreamConfiguration.capturesAudio = true`, `sampleRate = 48000`, `channelCount = 2`,
+  `excludesCurrentProcessAudio = true` (Snipvero's own sounds, if any, stay out). Delivered as
+  `SCStreamOutputType::Audio` sample buffers on the same stream. It needs only the Screen
+  Recording permission Snipvero already has (shown as "Screen & System Audio Recording"); it adds no new prompt.
+- **Microphone: decision — `AVCaptureSession` + `AVCaptureAudioDataOutput` on every supported macOS version, not
+  SCK's `captureMicrophone`.** The check: `SCStreamConfiguration.captureMicrophone`,
+  `microphoneCaptureDeviceID` and `SCStreamOutputType::Microphone` exist in the bindings but are
+  **macOS 15.0+** (the same release as `SCRecordingOutput`). We support 14, so an `AVCaptureDevice` path is needed
+  regardless; keeping a second SCK-only path for 15+ would be two implementations of the same feature, double QA, and
+  differing sample formats, for no gain (MVP rule, ADR-003). One AVFoundation path is used on 14, 15 and later.
+  Permission: `AVCaptureDevice.authorizationStatus(for: .audio)`; `requestAccess` is called
+  only when the toggle is turned on **and** the status is `notDetermined`; `denied` shows guidance with a fixed System Settings
+  URL (`Privacy_Microphone`, same mechanism as ADR-015, added to the allowed list in `system/macos.rs`) and leaves the toggle off.
+  The default input device is used; no device picker in this version.
+- **Mixing:** players generally play only the first audio track of an MP4, so system and mic
+  audio are mixed into **one AAC track** (`kAudioFormatMPEG4AAC`, 48 kHz, stereo, 128 kbit/s).
+  The mixer is a small pure Rust module (`recording/mixer.rs`): both sources are converted to
+  interleaved `f32` 48 kHz stereo, aligned on their presentation timestamps (host clock; both SCK and AVCapture use `CMClockGetHostTimeClock()`),
+  summed with a soft clamp and fed to one `AVAssetWriterInput` (linear PCM in, the writer's `outputSettings` do the AAC encoding). With one source
+  enabled it is a pass-through. Gaps (a source stalling) are filled with silence; drift beyond 100 ms is corrected by dropping or padding. Unit tests cover
+  alignment, gap filling, clamping and the single-source path. If task 3's measurement shows two AAC tracks are acceptable to QuickTime and the page
+  preview, the mixer may be replaced by two tracks; the decision to prefer the mixer rests on the player behaviour above, to be re-measured.
+- **Info.plist and signing (see RELEASE.md):**
+  - `NSMicrophoneUsageDescription` is added to `src-tauri/Info.plist` (English, one sentence:
+    "Snipvero records your microphone only when you turn on microphone audio for a screen recording."). Without the key the system terminates the app on the first microphone access.
+  - Because the app uses the **hardened runtime** (required for notarization), microphone access
+    also needs the entitlement **`com.apple.security.device.audio-input`**. This ends the "no entitlements" statement in RELEASE.md §signature and
+    `scripts/verify-macos-bundle.mjs` (line ~225): add `src-tauri/Entitlements.plist` containing only that key, reference it via `bundle.macOS.entitlements` in
+    `tauri.conf.json`, and change the verifier to require **exactly** that one entitlement (and still reject `get-task-allow`).
+    Notarization accepts this entitlement; it is not on Apple's restricted list and needs no provisioning profile. No sandbox, no
+    camera, no `screen-capture` entitlement (Screen Recording is a TCC grant, not an entitlement; ScreenCaptureKit system audio needs none).
+  - **Trade-off, stated plainly:** the usage string and entitlement ship in every build even though audio is off by
+    default; the prompt itself appears only when the user enables the microphone. The alternative — a separate build — is rejected.
+  - **TCC and signing identity:** the Microphone grant, like Screen Recording (ADR-010/011), is tied to the signing identity; a
+    change from ad-hoc to Developer ID, or of the local development identity, asks again. `tccutil reset Microphone com.snipvero.app` resets it for testing.
+  - The ad-hoc beta (ADR-025) also needs the entitlement to be applied when signing, or the microphone is silently denied; task 3 verifies this on the local
+    development identity first, and the notarized path in RELEASE.md afterwards.
+  - **Windows:** no equivalent; stubs only.
+
+### IPC names (mirrored in `src/ipc.ts` and `src-tauri/src/events.rs`)
+
+| Kind    | Name                          | Direction / payload                                                                                                                |
+| ------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| command | `recording_start`             | page → Rust: `{ session, region: PixelRect, systemAudio: bool, microphone: bool }` → `RecordingInfo`                               |
+| command | `recording_stop`              | page/tray → Rust: stop and finalize; returns the finished `RecordingInfo`                                                          |
+| command | `recording_discard`           | page → Rust: `{ id }` delete the temp file                                                                                         |
+| command | `recording_save`              | page → Rust: `{ id }` opens the native save dialog; Rust copies/moves the temp file to the chosen `*.mp4`                          |
+| command | `recording_export_gif`        | page → Rust: `{ id, fileName, options }` runs the GIF export (task 4), save dialog from Rust; answers `{ outcome, bytes, frames }` |
+| command | `recording_gif_plan`          | page → Rust: `{ id, options }` → output size and size estimate, or the reason it cannot be made (added in task 4)                  |
+| command | `recording_cancel_gif_export` | page → Rust: `{ id }` stops a running export (added in task 4)                                                                     |
+| command | `recording_status`            | page → Rust: current state, elapsed ms, cap, audio availability (also used for the permission rows in the main window)             |
+| command | `recording_set_audio`         | page → Rust: `{ kind: "system" \| "microphone", enabled }` validates permission, persists the setting, returns the new status      |
+| event   | `recording-state`             | Rust → main/review window: `RecordingStatus` on every state change (not per frame)                                                 |
+| event   | `recording-progress`          | Rust → windows, at most 2 per second: elapsed ms, file bytes                                                                       |
+| event   | `recording-failed`            | Rust → main window: user-facing message (disk full, permission lost, encoder error)                                                |
+| event   | `recording-export-progress`   | Rust → review window: `{ id, phase: running\|done\|cancelled\|failed, fraction 0..1, message }`, at most ~10 per second            |
+
+Constants live in `events.rs` and `ipc.ts` with the existing "keep in sync" comments; the commands are registered
+in `lib.rs`. All commands validate the session / recording id like `overlay_*` (ADR-019): a stale id is refused,
+never acted on. The page never sends a path and never receives one.
+
+### Module layout
+
+```
+src-tauri/src/recording/
+  mod.rs        platform-independent: RecordingState machine, RecordingInfo/Status, errors, cap/bitrate/size
+                math (pure, tested), temp directory lifecycle, commands, `unsupported` dispatch
+  macos.rs      SCStream + SCStreamOutput delegate + AVAssetWriter + microphone session (objc2)
+  windows.rs    `start`/`stop` return `RecordingError::Unsupported`; compiles with CI only
+  mixer.rs      pure PCM mixing/alignment (tested on both OSes, no platform imports)
+  gif.rs        pure GIF export: limits, plan and size estimate, timeline resampling, box downscale, delays, `gif` encoder (task 4)
+  macos/reader.rs  the MP4 → BGRA pictures frame source (`AVAssetReader`), a submodule of macos.rs like audio.rs
+  tempfiles.rs  private temp dir creation, stale cleanup, free-space check (pure parts tested)
+src-tauri/src/system/macos.rs   + microphone settings URL; src-tauri/src/tray.rs  + Start/Stop Recording
+src/recording/                  RecordingBar/ReviewWindow, pure state/formatting helpers, tests
+```
+
+`mod.rs` selects the backend with `#[cfg(target_os = "macos")] mod macos; use macos as platform;`
+exactly like `capture/mod.rs`; shared code imports no platform module. HiDPI: region → points and
+even-size rounding go through `geometry.rs` (new pure functions with tests), not into `macos.rs`.
+Entry point: a new **Record Region** action in the overlay toolbar (reusing the selection) and a tray item that opens the
+overlay in recording mode. No second shortcut in the first version.
+
+### GIF crate selection criteria
+
+GIF is an export of a finished MP4 (decode with `AVAssetReader`/`AVAssetImageGenerator` on macOS, no second capture, no second pipeline).
+A crate qualifies only if it:
+
+1. is licensed MIT, Apache-2.0 or a dual of them (AGENTS.md / ADR-021 policy), with all of its **transitive** dependencies inside
+   that policy (`pnpm notices:check` is the gate);
+2. is pure Rust, builds on both macOS and Windows with no C toolchain or system library, and adds no network/HTTP
+   code (AGENTS.md privacy rule);
+3. is maintained (a release in the last 18 months), `edition`/MSRV compatible with Rust 1.90;
+4. has a small tree (target: at most 2 new crates beyond those already in `Cargo.lock`) and **default features off**;
+5. encodes a global or per-frame palette with delays, loop count and frame disposal, and quantizes RGBA
+   (NeuQuant or equivalent) so no second quantizer crate is needed.
+
+**Candidate: `gif` 0.14.x (image-rs)**, `MIT OR Apache-2.0`. Its only dependencies are `color_quant` (MIT, NeuQuant)
+and `weezl` (`MIT OR Apache-2.0`, **already in the tree**), so the net addition is `gif` and `color_quant`. It meets 1–5 on
+paper; task 4 confirms with `cargo tree`, `pnpm notices:check` and a size comparison before adding it. Rejected up front:
+`gifski` (AGPL-3.0, and ffmpeg-oriented, fails criterion 1), `image` with its GIF codec (pulls the whole `image` crate), shelling out to ffmpeg/gifsicle.
+
+- **GIF export limits:** at most 15 fps (default 10), width at most 800 px (default: the region's width in points, i.e. 1×, capped),
+  at most 60 s of source (a longer recording needs a trim, out of scope for the first version, and the dialog says so), a size estimate
+  shown before saving. Export runs on a worker, is cancelable, writes a hidden sibling file and renames it (ADR-019), and never touches the MP4.
+
+### Task 2 outcome (silent MP4 on macOS)
+
+Implemented as planned in `recording/{mod,macos,windows,tempfiles}.rs`, `geometry.rs`, the overlay's Record entry points, the tray
+row, the review window and the `snipvero-recording` preview protocol. Deviations and decisions taken while building it:
+
+- **Dependencies.** `objc2-av-foundation` and `objc2-core-media` (default features off) are direct; `objc2-core-audio`,
+  `objc2-core-audio-types` and `objc2-core-video` come in transitively because the two bindings depend on them
+  (5 new crates in `Cargo.lock`, all `Zlib OR Apache-2.0 OR MIT`, the objc2 family; `pnpm notices:check` passes). `dispatch2` (already in the tree through
+  `rfd` and `tao`) is now named directly for the frame queue, and `objc2-foundation` gained `NSDictionary` and `NSValue`.
+  `libc` and `objc2-core-video` are not direct dependencies: free space uses `NSURL` resource values, the frame status uses the
+  sample's attachment dictionary.
+- **Whole-app exclusion.** The content filter excludes Snipvero's entire application, which covers the overlay, the native
+  indicator and the review window with one rule, so the indicator needs no separate filter entry.
+- **Indicator.** The red border and clock reuse the countdown panel (`overlay/macos/countdown.rs`, generalized with a text and a colour);
+  the tray row becomes **Stop Recording** and the tray title shows a red dot and the elapsed time. Both only reflect state: they have no logic of their own.
+- **Lock hand-off.** `overlay::hand_off_to_recording` closes the overlays like `close` but keeps the capture lock; the recording
+  releases it when it ends or fails to start. A capture, a second recording and an update install are therefore excluded for the whole recording.
+- **Stop sources.** Tray row, capture shortcut, cap, 1 GiB file guard, and a stream/encoder failure reported by the delegate. A repeated stop is
+  ignored (`Machine::begin_stop` acts once). The writer's session ends at the host-clock time of the stop, so a static screen
+  (SCK sends no frames) still yields a video as long as the recording.
+- **Display removal / permission revoked.** Handled by `stream:didStopWithError:`: the recording is finalized with a notice. No
+  separate `NSApplicationDidChangeScreenParametersNotification` observer was added; this path is **not tested** (no way to unplug a display or revoke the permission here).
+- **File-size bound.** At 20 Mbit/s the default cap gives 750 MB; at the 600 s maximum it would be 1.5 GB, which the 1 GiB guard stops at about
+  430 s. Regions of 5K displays do not fit H.264 level 5.2 (at most 8192 px per side and 36 864 macroblocks, 9.4 megapixels) and are refused with a message.
+- **Not implemented (not needed yet):** `recording_stop` (the page has no stop control; the tray, shortcut and cap stop it) and the
+  `recording-progress` event (nothing displays it; the clock is the tray title and the indicator). Mid-recording cancel is stop, then Discard;
+  `Recorder::cancel` is only used when the app quits or a start is raced by exit.
+- **Review window.** Plays the file through a custom protocol with HTTP range support instead of a path; the CSP gained a `media-src`
+  for it. Closing the window keeps the recording; the tray row becomes **Review Last Recording…**; another recording is refused until it is saved or discarded.
+  Save, Copy File and Copy Path run in Rust. Copies on the clipboard are valid only until the temporary file is deleted (documented in the window and README).
+- **Settings.** `recordingMaxSeconds` (clamped to 10–600) in `settings.json`; changing the shortcut preserves it. No UI for it.
+- **Measured, macOS (real ScreenCaptureKit + AVAssetWriter, run from a terminal that holds Screen Recording permission):**
+  - The ignored test `records_a_region_to_a_finished_mp4` records 2 s of a 320×240 point region: 58–59 frames, 0 dropped, 2.01 s, 70–480 KB (screen-content dependent),
+    `ftyp` + `moov` present; an AVFoundation probe reports `isPlayable`, one video track, `avc1`, 320×240, ~30 fps, duration 2.007 s; QuickLook produces a thumbnail.
+  - The built-in harness (`--stress-record=2 --stress-record-quit`, debug binary with a temporary identifier) ran 2 full cycles through the real state
+    machine: 960×540 px, 89 frames in 3.0 s, 783–788 KB, finalized, discarded, folder empty afterwards; then quit in the middle of a third recording left no
+    `recordings-*` folder. After `kill -9` mid-recording the folder was left behind and the next launch removed it ("removed 1 leftover recording folder(s)").
+  - **Not verified:** the picture's content and the region's placement. The test machine's screen was locked (lock-screen wallpaper), so frames were
+    dark/moving and no app window could be placed over a known region. The overlay → Record flow, the tray row/title, the indicator panel, the review window with video
+    playback, Save/Copy, the shortcut stop, a Retina vs 1× region, memory over many cycles, the signed `.app` smoke test with real clicks and Windows are
+    **not run**; the Turkish QA checklist in the local `docs/PROGRESS.md` covers them.
+
+### Task 3 outcome (optional audio, macOS)
+
+**Measured, macOS 27.2 (build 26B123), Apple silicon, built-in microphone, run from a terminal and from ad-hoc hardened probe apps:**
+
+- **SCK system audio** (`capturesAudio`, 48 kHz, 2 channels requested): every buffer is 48 000 Hz, 2 channels, 32-bit **float, non-interleaved**
+  (`flags 0x29`, two planes of 3 840 bytes), **960 frames (20 ms)**; buffers keep coming while nothing plays (all-zero), so a quiet system is not
+  "no buffers". A sound played with `afplay` shows as a peak of 0.36. Timestamps are on the host clock: the first audio buffer began 12–17 ms after the first
+  picture; **delivery latency** (arrival minus end of buffer) was 0.6–102 ms (mean ≈ 30 ms), hence the mixer's 250 ms latency.
+- **Microphone format** (`AVCaptureDevice.activeFormat`, built-in): 48 000 Hz, **1 channel, 32-bit float, interleaved** (`flags 0x9`). Not read from
+  delivered `AVCaptureAudioDataOutput` buffers: see "not measured". The code therefore reads each buffer's own format (float32/int16, planar or
+  interleaved, any channel count, any rate) instead of assuming this one, and resamples linearly if a device cannot give 48 kHz.
+- **Hardened runtime without the entitlement:** a probe `.app` (ad-hoc, `-o runtime`, with `NSMicrophoneUsageDescription`, **no** entitlement) calling
+  `AVCaptureDevice.requestAccess(for: .audio)` was **answered `false` after 0.00 s and the status became `denied`: no prompt**. The same probe signed with
+  `com.apple.security.device.audio-input` **waited for the user** (no answer for 8 s, status stayed `notDetermined`, i.e. the prompt appeared). The
+  entitlement is therefore required, as designed. (The probe grants are of throwaway identifiers.)
+- **Decision: mono or stereo?** The output is **stereo** AAC, 48 kHz, 128 kbit/s: system audio is stereo, the (mono) microphone is copied to both channels.
+  Measured result of a real recording (SCK system audio, 5 s, ad-hoc test): `soun` track `aac `, 48 kHz, 2 ch, starts at 0.000, 5.0879 s long, decoded
+  with the same peak (0.36) as the capture; `vide` track 5.0883 s; QuickTime-compatible container (`isPlayable`).
+- **One mixed track vs. two:** kept the mixer (players play the first audio track). Two tracks were not tried in QuickTime; the decision still rests on the
+  player behaviour documented above, not on a new measurement.
+
+**Implementation.** `recording/mixer.rs` (pure, 23 tests: alignment on the host clock, gap filling, overlap dropping, jitter and drift tolerance of 100 ms,
+limiter that is the identity up to 0.9, planar/interleaved/int16/mono conversion, resampler, a clock-correction for a source not stamped on the host clock);
+`recording/macos/audio.rs` (PCM sample buffers into one AAC `AVAssetWriterInput`, `AVCaptureSession` microphone, permission lookup and request);
+`recording_audio` / `recording_set_audio` (the ADR planned this in `recording_status`; a separate query keeps the per-state event free of permission calls),
+`settings.json` keys `recordSystemAudio` / `recordMicrophone` (absent = off), the two switches in the main window, and `recording_start` gaining
+`withoutMicrophone`. The IPC table above is otherwise unchanged; `recording_start` still takes the audio choice from the stored settings rather than from the page.
+Deviations and decisions taken while building it:
+
+- **A pacer instead of a pull model.** A thread hands the mix to the writer every 100 ms, up to 250 ms before now on the host clock. A source that stalls,
+  starts late or never delivers is silence and holds nothing back; late data is dropped. At stop the rest is flushed up to the end of the video.
+- **Still screens (Task 2 interaction, measured).** With only a video input the writer stretched the last picture to `endSessionAtSourceTime` (a 4 s recording of
+  a still lock screen: video track 3.995 s). **With an audio input present it did not**: video track 0.067 s, sound 5.12 s. With sound on, the newest picture
+  is therefore appended once more, stamped one frame before the end (`hold_last_picture`); re-measured: video 5.088 s, sound 5.088 s. Silent recordings are unchanged.
+- **No permission look-up while both are off.** `recording_start` does not even read the microphone status then (`plan_audio`); the main window's `recording_audio`
+  reads the status only when the audio panel is shown (supported platforms), and it never prompts.
+- **Microphone not allowed at start:** `recording_start` is refused with the code `microphoneUnavailable` before the overlay closes; the overlay offers
+  **Record without microphone** (an explicit choice that is not stored). A source that fails mid-recording, or a microphone that delivered nothing, is named in the
+  review window's notice. The review video is no longer `muted`, and a "Sound" row says what the file has.
+- **Dependencies:** no new crate. `objc2-core-audio-types` is named directly (already in the tree), and more feature flags of `objc2-av-foundation` /
+  `objc2-core-media` are enabled. The AAC keys are string literals (`AVFormatIDKey`, …): AVFAudio has no bindings in the tree and the constants are plain strings.
+- **Packaging:** `src-tauri/Entitlements.plist` with the one entitlement, `bundle.macOS.entitlements`, `NSMicrophoneUsageDescription` in `src-tauri/Info.plist`;
+  `pnpm verify:macos` requires the usage text and exactly that entitlement (verified on a built local-identity `.app` and DMG: all checks pass); RELEASE.md and
+  AGENTS.md updated. This ends ADR-020's "no entitlements" statement for the one entitlement above (nothing else changes: no sandbox, no JIT).
+- **Microphone, measured later by the maintainer on a live build (macOS 27.2, built-in microphone, unlocked screen):** the delivered buffers were
+  **24 000 Hz** (958 frames ≈ 40 ms), not the 48 kHz the device reports as its active format, so the per-buffer format reading and the linear resampler were
+  needed, not a fallback. They were **stamped on the host clock** (first buffer arrived 5 ms after it ended, no clock shift), like system audio (2–3 ms).
+  Two recordings (14.0 s and 8.2 s) with both sources: 0 rejected buffers, 0 dropped audio frames, system and microphone buffer counts within 2 % of each other,
+  the last picture held to the end. The maintainer confirmed by listening that system audio and the microphone are both audible, together and alone, and that
+  the switches, the first-use prompt and the video recording work. The offset between the two sources was not measured numerically beyond "both on the host clock".
+- **Still not verified:** (1) denied / reset / revoked-permission flows and a microphone that disappears mid-recording (the maintainer's pass covered the granted
+  path; unconfirmed here), (2) long-run A/V drift over 5–10 minutes (the design tolerates ≈ 30 ms in ten minutes), (3) macOS 14 and 15 (only macOS 27 ran),
+  (4) notarized builds and Windows (stubs only; `cargo check` for the MSVC target could not run here: no C compiler for `ring`).
+
+### Task 4 outcome (GIF export, macOS)
+
+**Crate verification (the criteria above, checked before adding `gif`).** `cargo tree -e normal --format "{p} {l}"` for `gif = { version = "0.14", default-features = false,
+features = ["std", "color_quant"] }`: `gif 0.14.2` (`MIT OR Apache-2.0`) → `color_quant 1.1.0` (`MIT`), `weezl 0.1.12` (`MIT OR Apache-2.0`). Nothing else.
+
+1. Licences: all three inside the policy; `pnpm notices:check` passes with the regenerated file (334 Rust components, licences allowed).
+2. Pure Rust, no build script, no C, no network or HTTP code (read: its sources are the encoder, the decoder and `common.rs`, about 108 KB); it builds wherever the rest does.
+3. Maintained: 0.14.2 was published on 2026-04-09 (crates.io), `rust-version = 1.62`, edition 2021, well below our 1.90.
+4. Tree: `Cargo.lock` gains **two** packages (`gif`, `color_quant`); `weezl` was in the lock already (`arboard` → `image` → `tiff`, Windows only) but is compiled on macOS for the first time,
+   so three small crates are new in a macOS build. Default features are off; `raii_no_panic` (a panic guard on drop) is not enabled; `std` and `color_quant` are the two the code needs.
+5. It writes per-frame local palettes with delays, the NETSCAPE loop extension and disposal, and `Frame::from_rgba_speed` uses the **exact** palette when a picture has at most 256 colours
+   (most screen content) and NeuQuant otherwise, so no second quantizer crate is needed.
+
+Binary size: the release executable (LTO, `codegen-units = 1`, stripped) grew from 6 420 752 to 6 504 288 bytes, **+83 536 bytes (+1.3 %)**, for the whole of task 4 (the two crates and `weezl`, the pure module, the
+reader and the commands), measured against a clean build of the previous commit. The crates alone are therefore under that.
+
+**Design as built.**
+
+- **Reader.** `macos/reader.rs`: `AVURLAsset` of the temporary MP4 → `AVAssetReader` + `AVAssetReaderTrackOutput` with `kCVPixelBufferPixelFormatTypeKey = 32BGRA`, `alwaysCopiesSampleData = NO`.
+  Each sample's `CVPixelBuffer` is locked read-only, handed to the callback with its stride and presentation time and unlocked, inside one autorelease pool per picture. The pool matters on a worker thread
+  with no run loop: without it every picture's autoreleased objects would live until the export ends. The cancel flag is checked before every picture.
+  `tracksWithMediaType:` is deprecated since macOS 15 in favour of an asynchronous loader that needs a completion block and a run loop; a finished local file is ready at once, so the synchronous call
+  is used with `#[allow(deprecated)]` and works on 14 and later. `objc2-core-video` is named directly (already in the tree); `objc2-av-foundation` gains `AVAsset`, `AVAssetReader`, `AVAssetReaderOutput`,
+  `AVAssetTrack`, and `objc2-core-media` its `objc2-core-video` feature. No new crate beyond `gif` and `color_quant`.
+- **Timing comes from timestamps.** The output is sampled on a fixed clock of `fps` ticks over the recording's own length (`Finished::duration`, which the writer set from the host clock, not the
+  frame count). Each tick shows the newest picture at or before it; ticks that show the same picture are one GIF frame whose delay is their total. A still screen (SCK sends nothing) is therefore **one frame
+  with the whole length as its delay**, which is how the measurement below came out. A picture that is replaced before any tick looks at it is dropped. Delays are rounded on the cumulative time, not per frame,
+  so 15 fps (6.67 cs per tick) does not make a minute 4 s too long (test: 900 ticks sum to exactly 6000 cs); every delay is at least 6 cs, above the 2 cs that browsers still honour. Identical
+  neighbouring pictures (compared after scaling) are merged as well, which also covers the held last picture (`hold_last_picture`, with sound on).
+- **Scaling.** A box filter (each output pixel is the mean of the source pixels it covers), never nearest-neighbour, so text and thin lines survive. Output width is chosen from the limits and the aspect
+  ratio is kept; no upscaling (the width cannot exceed the video's).
+- **Limits (all enforced in Rust by `gif::plan`, and the page only displays its answer).** At most 15 fps (choices 5, 10, 15; default 10), width at most 800 px and the video's own width, at least 16 px, source
+  at most 60 s (`TooLong`: "This recording is 1:20 long. A GIF can be made from at most 60 seconds of video; save it as an MP4 instead."). The default width is the region's width in **display points** (1×, so a Retina
+  recording is not doubled), capped; `RecordingStatus` carries `gifMaxWidth`, `gifDefaultWidth` and `gifDefaultFps` so the page has no copy of these numbers. A recording over 60 s opens the panel with that message
+  and no Export button.
+- **Memory.** Streamed: the decoder's picture is scaled the moment it arrives and released; the writer holds at most three scaled pictures (one waiting for its duration, one waiting to be merged or written, one being built).
+  The length of the source does not change that; it is bounded only by the 60 s limit on time.
+- **Save flow.** The options are validated first (a too-long recording never opens a dialog), then `rfd` asks for the file (`*.gif` only; suggested plain name `Snipvero-<date>.gif`, validated by
+  `export::valid_file_name_with`), then the export runs on a worker into a hidden sibling file renamed over the target by `export::replace_with` (ADR-019), so a cancelled or failed export leaves no
+  partial file and never damages an existing one. The recording's `saving` guard is held for the whole time (no Save, Discard or second export under it). **The MP4 is never touched and the recording is not
+  discarded** after a GIF: the user can still Save the MP4 afterwards.
+- **UI.** **Export as GIF…** opens a panel in the review window: frame rate, width, the size line (`600 × 400 px, up to about 4.2 MB`), then **Export…**, a progress bar with **Cancel export**, the result
+  (`GIF saved (2.5 MB, 24 frames).`) or the error. Other buttons of the window are disabled while it runs.
+- **IPC.** Three additions to the table: `recording_gif_plan` (so the estimate and the limits are computed once, in Rust), `recording_cancel_gif_export`, and the answer of `recording_export_gif`
+  (`{ outcome, bytes, frames }`). `recording-export-progress` carries `{ id, phase, fraction, message }`.
+- **Windows.** `read_pictures` is a stub returning "not available on this platform"; `recording_export_gif` refuses before any dialog. The pure module compiles everywhere and its tests run on every OS
+  (the `cargo check --target x86_64-pc-windows-msvc` could not run here: no C compiler for `ring`, as in task 3).
+
+**Measured, macOS 27.2, Apple silicon, three displays, from a terminal with Screen Recording (the screen was unlocked this time):**
+
+- **Real still screen (ignored test `exports_a_recording_as_a_gif`, 3 s and 5 s regions of a static desktop):** the MP4 has **1 picture**; the reader returned 1 picture; the GIF has **1 frame** whose delay is 300 cs /
+  500 cs, 10 173 bytes at 240 × 180. This is the case the ticket warned about: the length comes from the stamps and the recording's duration, not from the frame count.
+- **Real moving content** (a test window with a moving block and a counter at 30 Hz in the region, which stopped after 2.28 s of the 5 s recording): 65 pictures, stamps 0.00–2.28 s at about 30 fps, then the still
+  desktop; **24 GIF frames** (23 ticks of motion at 10 fps plus the held ending), delays sum to **500 cs (5.0 s)**, 135 107 bytes at 240 × 180, decoded in 1.6 s in a _debug_ build. The first frame was looked at
+  (scaled from 320 to 240 px, text legible). Per moving frame the output was about 5.6 KB for 43 200 pixels, i.e. 0.13 bytes per pixel per frame: `ESTIMATE_BYTES_PER_PIXEL` is **0.14**, a deliberately upper-ish figure
+  (ticks that repeat or flat content cost much less, so the estimate says "up to about").
+- **Worst case (ignored test `worst_case_export_time_and_size`, release):** 60 s of 1920 × 1080 pictures that all change, 15 fps, 800 px wide: **900 frames, 33.4 MB, 34.8 s** (including generating the 900 test
+  pictures, so the export is somewhat under that) and a **peak resident size of 28 MB** (19.7 MB footprint). The plan's estimate for that case was 45.4 MB, an upper bound as intended. The reader
+  does not hold more than one decoded picture at a time, so the 28 MB does not grow with the number of pictures.
+- **Cancel:** with the flag set before the first picture, the real reader stops with `Cancelled` and the export reports it; the MP4 compared byte for byte before and after the export was identical.
+
+**Not verified:** the save dialog and the whole command path through the review window (the panel, progress events, Cancel by hand, the result line) were not driven with real clicks and the page was
+not run in the app, only in its unit tests with a mocked `ipc`; a GIF opened in Safari, Chrome and Preview (only decoded with the `gif` crate's decoder, `sips` and by eye as a still); the 60 s limit with a real
+60 s recording (the plan refuses it in tests); a Retina region vs a 1× one for the default width (the arithmetic is tested; no 1× display here); an MP4 recorded with sound (the reader only asks for the video
+track, and the held picture merges, but a recording with audio was not exported); macOS 14 and 15 (only 27 ran); memory over a long source (the 60 s limit prevents one; the 28 MB peak is the 60 s worst case);
+notarized builds; Windows (a stub, compiled by CI only).
+
+### Addendum: Stop button on the recording indicator
+
+The indicator gained a control strip beside the border: the clock, a **Stop** button and "or press <capture shortcut>" (`shortcut::display_accelerator`, from the registered shortcut; absent when it is
+not registered). It is a **second, small panel**, not part of the click-through one, so recorded apps still receive clicks through the border panel; it is nonactivating (`NonactivatingPanel`,
+`becomesKeyOnlyIfNeeded`, `orderFrontRegardless`), so the recorded app keeps its focus, and it is a Snipvero window, so the whole-app exclusion keeps it out of the video. Placement is
+`geometry::recording_layout` (above the region, else below, else inside its top edge, always on the display). The button calls `stop(id, User)` on a spawned thread: stopping removes the indicator, and
+tearing the button's panel and target down inside the button's own action would free the object that is running. Measured on macOS 27.2 with the `--stress-record` harness and screenshots: the strip
+renders above the region ("● 0:01 [Stop] or press F13") on a secondary display. **Not verified:** a real mouse click on the button (synthetic events from a terminal were not delivered, probably for lack of
+the Accessibility permission), keyboard operation, VoiceOver, mixed-DPI placement, and that the strip is absent from the recorded video (by the whole-app exclusion, not re-measured).
+
+### Plan for tasks 2–4 (follow in order; each ends with `pnpm check` and the cargo trio)
+
+**Task 2: video (MP4, no audio)**
+
+1. `Cargo.toml`: add the `objc2-av-foundation`, `objc2-core-media` (and, if needed, `objc2-core-video`) entries under the macOS target; add the
+   `SCStream`-related SCK features; justification comment per ADR-005; `pnpm notices` and commit the regenerated file.
+2. `geometry.rs`: pure functions `even_output_size`, `region_to_points`, `recording_bitrate` (+ tests incl. mixed-DPI and odd sizes).
+3. `recording/{mod,tempfiles,windows}.rs` and `events.rs`/`ipc.ts`/`lib.rs` registration: the state machine, caps, temp-dir lifecycle,
+   stale cleanup at startup (called from `lib.rs` setup), cleanup on `RunEvent::Exit`, `Unsupported` stubs; unit tests for the
+   state machine, cap/deadline, free-space and cleanup logic (using a temp dir).
+4. `recording/macos.rs`: SCStream + delegate + AVAssetWriter, start/stop/finalize, deadline stop, failure paths (permission revoked, display
+   removed → `NSApplicationDidChangeScreenParametersNotification` stops with a message, writer `Failed`), indicator panel (reuse `overlay/macos/countdown.rs` patterns).
+5. Entry points: overlay toolbar **Record**, tray **Start/Stop Recording**, shortcut stops it; the review window (Save…, Discard) and `recording_save`
+   through `rfd` as in `export/mod.rs`; hand-off of the lock with `overlay::close` (the overlay must be gone before the first frame).
+6. Tests + manual QA on macOS (record 10 s, region on a Retina and a 1× display, cap with a temporary low value, quit mid-recording → no leftover files,
+   stale cleanup after `kill -9`, `ffprobe`/QuickTime opens the file, no Snipvero window in the video). A `--stress-record=N` harness in
+   `devtools.rs` (records 3 s, stops, discards, checks memory and temp dir as `--stress-export` does).
+7. Docs: ARCHITECTURE.md (module list, recording pipeline), REQUIREMENTS.md (new FR), README.md (user-visible), ADR-037 status line.
+
+**Task 3: audio**
+
+1. Measure first and record in this ADR: sample formats from SCK audio and `AVCaptureAudioDataOutput`, timestamp offset between them,
+   and whether a signed hardened build without the entitlement is denied the microphone.
+2. `Info.plist` key; `Entitlements.plist`; `tauri.conf.json` `bundle.macOS.entitlements`; `scripts/verify-macos-bundle.mjs` (+ its
+   `*.spec-node.mjs` tests): require exactly the one entitlement; RELEASE.md (signature list, notarization, "Screen Recording/Microphone after a
+   signature change", testing with `tccutil reset Microphone`); AGENTS.md macOS testing block.
+3. `recording/mixer.rs` with tests; `macos.rs`: system-audio config, `AVCaptureSession` microphone input, permission flow, single AAC input;
+   `recording_set_audio` and the two toggles in the pre-record UI (both off; denied state with guidance);
+   `system/macos.rs` microphone settings URL (fixed, allow-listed).
+4. QA: each toggle alone and both together (mic only must not require anything beyond the microphone grant), denied microphone, revoking mid-recording,
+   output with no sound playing (silence, not an error), A/V sync over the maximum duration, both macOS 14 and 15+ if available (otherwise marked as untested).
+
+**Task 4: GIF export**
+
+1. Verify the crate against the criteria above (`cargo tree -e normal -i`, licenses, `pnpm notices:check`); add `gif` with default features
+   trimmed; ADR-005 justification comment; regenerate notices; record the result in this ADR.
+2. `recording/gif.rs`: pure frame decimation, nearest/box downscale and palette/delay math with tests; encoder wrapper writing to a hidden sibling file.
+   `recording/macos.rs`: `AVAssetReader` frame source for the MP4 (BGRA), progress and cancel.
+3. `recording_export_gif` + `recording-export-progress`, save dialog (`*.gif` only, plain suggested name as `rfd` today), UI: fps/width choice, size estimate, progress, cancel, error.
+4. QA and docs: file plays in browsers/Preview, memory stays bounded for a 5-minute source (frames streamed, never all held), temp file untouched, README/ARCHITECTURE/REQUIREMENTS updates and the status line of this ADR.
+
+- **Verification so far:** task 2 as listed under "Task 2 outcome", task 3 as listed under "Task 3 outcome", task 4 as listed under "Task 4 outcome". Still unverified: notarization acceptance of the entitlement, two tracks vs. the mixer in QuickTime, macOS 14/15 behaviour, the live microphone.
+
+## ADR-038: Fill, Blur and Highlight tools; mosaic computed in the page
 
 - **Status:** implemented (2026-11-19). Automated tests (vitest) pass on macOS Apple silicon; native
   macOS QA on Retina and mixed-DPI displays pending. Windows not locally verified.

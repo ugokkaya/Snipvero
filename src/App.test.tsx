@@ -2,17 +2,22 @@
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AppInfo, AppStatus } from "./ipc";
+import type { AppInfo, AppStatus, AudioStatus } from "./ipc";
 
 const ipc = vi.hoisted(() => ({
   appInfo: vi.fn(),
   appStatus: vi.fn(),
   startCapture: vi.fn(),
+  startRecording: vi.fn(),
+  recordingAudio: vi.fn(),
+  recordingSetAudio: vi.fn(),
+  openMicrophoneSettings: vi.fn(),
   showAbout: vi.fn(),
   openLink: vi.fn(),
   openScreenRecordingSettings: vi.fn(),
   restartApp: vi.fn(),
   onCaptureFailed: vi.fn(),
+  onRecordingFailed: vi.fn(),
   checkForUpdate: vi.fn(),
   installUpdate: vi.fn(),
   cancelUpdate: vi.fn(),
@@ -47,10 +52,19 @@ const status = (overrides: Partial<AppStatus> = {}): AppStatus => ({
   ...overrides,
 });
 
+const audio = (overrides: Partial<AudioStatus> = {}): AudioStatus => ({
+  supported: true,
+  system: false,
+  microphone: false,
+  microphoneAccess: "notDetermined",
+  ...overrides,
+});
+
 let App: () => ReactElement;
 let root: Root;
 let container: HTMLElement;
 let captureFailed: ((message: string) => void) | undefined;
+let recordingFailed: ((message: string) => void) | undefined;
 
 beforeAll(async () => {
   // The platform is read once when the module loads.
@@ -65,9 +79,14 @@ beforeEach(() => {
   vi.clearAllMocks();
   ipc.appInfo.mockResolvedValue(INFO);
   ipc.appStatus.mockResolvedValue(status());
+  ipc.recordingAudio.mockResolvedValue(audio());
   ipc.suspendShortcut.mockResolvedValue(status().shortcut);
   ipc.onCaptureFailed.mockImplementation((handler: (message: string) => void) => {
     captureFailed = handler;
+    return Promise.resolve(() => {});
+  });
+  ipc.onRecordingFailed.mockImplementation((handler: (message: string) => void) => {
+    recordingFailed = handler;
     return Promise.resolve(() => {});
   });
 });
@@ -242,6 +261,18 @@ describe("main window", () => {
     await render();
     await act(async () => captureFailed?.("Screen capture failed: test"));
     expect(container.querySelector(".banner")?.textContent).toBe("Screen capture failed: test");
+  });
+
+  it("starts choosing a region to record, and shows a recording failure", async () => {
+    await render();
+    await click(button("Record Region"));
+    expect(ipc.startRecording).toHaveBeenCalledTimes(1);
+    expect(ipc.startCapture).not.toHaveBeenCalled();
+    await act(async () => recordingFailed?.("Screen recording failed: test"));
+    expect(container.querySelector(".banner")?.textContent).toBe("Screen recording failed: test");
+    // Starting again clears the old message, as a new capture does.
+    await click(button("Record Region"));
+    expect(container.querySelector(".banner")).toBeNull();
   });
 
   it("opens the About window", async () => {

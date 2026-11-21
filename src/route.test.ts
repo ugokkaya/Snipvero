@@ -10,6 +10,10 @@ describe("routeFor", () => {
     expect(routeFor("about")).toEqual({ view: "about" });
   });
 
+  it("shows the recording review in the recording window", () => {
+    expect(routeFor("recording")).toEqual({ view: "recording" });
+  });
+
   it("shows the overlay with its display index", () => {
     expect(routeFor("overlay-0")).toEqual({ view: "overlay", index: 0 });
     expect(routeFor("overlay-3")).toEqual({ view: "overlay", index: 3 });

@@ -30,6 +30,12 @@ semver = "1"
 serde_json = "1"
 # PNG export; already in Tauri's dependency tree (ADR-007, ADR-018).
 png = "0.18"
+# GIF export of a finished recording (ADR-037, task 4): the encoder with NeuQuant quantization.
+# `MIT OR Apache-2.0`, pure Rust, no network code. Adds `gif` and `color_quant` (MIT) to
+# `Cargo.lock`; `weezl` (LZW, `MIT OR Apache-2.0`) was in it already through `tiff` but is first
+# compiled on macOS now. Default features trimmed to the two it needs (no `raii_no_panic`). The
+# alternative is writing an LZW encoder and a quantizer by hand.
+gif = { version = "0.14", default-features = false, features = ["std", "color_quant"] }
 # Native save dialog (NSSavePanel / IFileSaveDialog). No Linux backend is needed (ADR-018).
 rfd = { version = "0.17", default-features = false }
 
@@ -37,8 +43,8 @@ rfd = { version = "0.17", default-features = false }
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "NSAppleEventDescriptor", "NSAppleEventManager", "NSArray", "NSData", "NSError", "NSGeometry", "NSNotification", "NSOperation", "NSString", "NSURL"] }
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "libc", "NSApplication", "NSBitmapImageRep", "NSBox", "NSColor", "NSControl", "NSFont", "NSGraphics", "NSImageRep", "NSPanel", "NSPasteboard", "NSPasteboardItem", "NSResponder", "NSRunningApplication", "NSScreen", "NSText", "NSTextField", "NSView", "NSWindow", "NSWorkspace"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "NSAppleEventDescriptor", "NSAppleEventManager", "NSArray", "NSData", "NSDictionary", "NSError", "NSGeometry", "NSNotification", "NSOperation", "NSString", "NSURL", "NSValue"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "libc", "NSApplication", "NSBitmapImageRep", "NSBox", "NSButton", "NSColor", "NSControl", "NSFont", "NSGraphics", "NSImageRep", "NSPanel", "NSPasteboard", "NSPasteboardItem", "NSResponder", "NSRunningApplication", "NSScreen", "NSText", "NSTextField", "NSView", "NSWindow", "NSWorkspace"] }
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFCGTypes", "CFData"] }
 objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGDataProvider", "CGEvent", "CGEventTypes", "CGImage", "CGWindow"] }
 objc2-screen-capture-kit = { version = "0.3", default-features = false, features = [
@@ -50,7 +56,28 @@ objc2-screen-capture-kit = { version = "0.3", default-features = false, features
     "SCScreenshotManager",
     "SCShareableContent",
     "SCStream",
+    # Frame delivery for screen recording (ADR-037): the stream output takes a dispatch queue and
+    # hands over CMSampleBuffers.
+    "dispatch2",
+    "objc2-core-media",
 ] }
+# Screen recording (ADR-037): typed bindings to AVAssetWriter and CMSampleBuffer for the MP4 encoder
+# (VideoToolbox hardware H.264 through AVFoundation, no bundled codec) and, for the optional
+# microphone, AVCaptureSession with an audio data output. The alternative is
+# hand-written extern "C"/msg_send! for dozens of selectors, which is less safe and more code.
+# Same maintainers, generator and `Zlib OR Apache-2.0 OR MIT` licence as the crates above; default
+# features off, and only the feature names the code uses.
+objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "dispatch2", "objc2-core-media", "objc2-core-audio-types", "AVAsset", "AVAssetReader", "AVAssetReaderOutput", "AVAssetTrack", "AVAssetWriter", "AVAssetWriterInput", "AVCaptureAudioDataOutput", "AVCaptureDevice", "AVCaptureInput", "AVCaptureOutput", "AVCaptureOutputBase", "AVCaptureSession", "AVMediaFormat", "AVVideoSettings"] }
+objc2-core-media = { version = "0.3", default-features = false, features = ["std", "objc2-core-video", "CMBlockBuffer", "CMFormatDescription", "CMSampleBuffer", "CMSync", "CMTime", "objc2-core-audio-types"] }
+# GIF export (ADR-037, task 4): AVAssetReader hands back BGRA pictures as CVPixelBuffers, whose rows are
+# read through these bindings. Already in the tree through the two crates above; named directly for its types.
+objc2-core-video = { version = "0.3", default-features = false, features = ["std", "CVBase", "CVBuffer", "CVImageBuffer", "CVPixelBuffer", "CVReturn"] }
+# Audio for screen recordings (ADR-037): the sample formats of both audio sources and the PCM we hand
+# to the encoder. Already in the tree through the two crates above; named directly for its types.
+objc2-core-audio-types = { version = "0.3", default-features = false, features = ["std", "CoreAudioBaseTypes"] }
+# The serial queue that receives the stream's frames. Already in the tree (rfd, tao); only named
+# directly now because the queue is created here.
+dispatch2 = { version = "0.3", default-features = false, features = ["std", "objc2"] }
 # Open at Login through SMAppService (ADR-033); same objc2 family as above, no other crates.
 objc2-service-management = { version = "0.3", default-features = false, features = ["std", "objc2", "objc2-foundation", "SMAppService"] }
 

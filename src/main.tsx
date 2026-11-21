@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { About } from "./About";
 import { App } from "./App";
 import { Overlay } from "./overlay/Overlay";
+import { RecordingReview } from "./recording/RecordingReview";
 import { routeFor } from "./route";
 import "./App.css";
 
@@ -19,6 +20,8 @@ createRoot(root).render(
       <Overlay index={route.index} />
     ) : route.view === "about" ? (
       <About />
+    ) : route.view === "recording" ? (
+      <RecordingReview />
     ) : (
       <App />
     )}

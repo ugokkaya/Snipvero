@@ -6,6 +6,13 @@
 //!
 //! `--stress-export=<cycles>`: the same, but each cycle ends with an export
 //! (`export::stress_export`: composition, PNG + TIFF, onto a private pasteboard) instead of Escape.
+//!
+//! `--stress-record=<cycles>`: each cycle records the central quarter of the first display for
+//! three seconds, stops, and discards the file (`recording::stress_record`), then checks the
+//! recording folder is empty again. Needs Screen Recording permission. With `--stress-record-quit`
+//! the app then quits during one more recording (exit cleanup). `--stress-record-audio=system`,
+//! `=microphone` or `=system,microphone` records with those sound sources (the microphone needs
+//! its permission).
 
 use std::time::{Duration, Instant};
 
@@ -13,6 +20,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::export;
 use crate::overlay::{self, CaptureState};
+use crate::recording;
 
 /// Pause before sampling, so WebKit helper processes of closed overlays can exit.
 const SETTLE: Duration = Duration::from_secs(3);
@@ -27,6 +35,18 @@ enum End {
 }
 
 pub fn start_from_args(app: &AppHandle) {
+    if let Some(cycles) = std::env::args()
+        .find_map(|arg| arg.strip_prefix("--stress-record=")?.parse::<u32>().ok())
+        .filter(|&cycles| cycles > 0)
+    {
+        let app = app.clone();
+        std::thread::spawn(move || {
+            if let Err(err) = stress_record(&app, cycles) {
+                eprintln!("[stress] failed: {err}");
+            }
+        });
+        return;
+    }
     let flag = |prefix: &str| {
         std::env::args().find_map(|arg| arg.strip_prefix(prefix)?.parse::<u32>().ok())
     };
@@ -75,6 +95,38 @@ fn stress(app: &AppHandle, cycles: u32, end: End) -> Result<(), String> {
     }
     eprintln!("[stress] done");
     Ok(())
+}
+
+fn stress_record(app: &AppHandle, cycles: u32) -> Result<(), String> {
+    std::thread::sleep(SETTLE);
+    eprintln!("[stress] baseline settled");
+    for cycle in 1..=cycles {
+        let line = recording::stress_record(app, 3, false, audio_from_args())
+            .map_err(|e| format!("cycle {cycle}: recording failed: {e}"))?;
+        eprintln!("[stress] cycle {cycle} recorded {line}");
+        std::thread::sleep(SETTLE);
+        eprintln!("[stress] cycle {cycle} settled");
+    }
+    eprintln!("[stress] done");
+    // `--stress-record-quit` then quits in the middle of one more recording, for the exit cleanup.
+    if std::env::args().any(|arg| arg == "--stress-record-quit") {
+        eprintln!("[stress] quitting mid-recording");
+        recording::stress_record(app, 2, true, audio_from_args())?;
+    }
+    Ok(())
+}
+
+fn audio_from_args() -> recording::AudioChoice {
+    let list = std::env::args()
+        .find_map(|arg| {
+            arg.strip_prefix("--stress-record-audio=")
+                .map(str::to_owned)
+        })
+        .unwrap_or_default();
+    recording::AudioChoice {
+        system: list.split(',').any(|name| name == "system"),
+        microphone: list.split(',').any(|name| name == "microphone"),
+    }
 }
 
 fn wait(started: Instant, done: impl Fn() -> bool) -> Result<(), ()> {

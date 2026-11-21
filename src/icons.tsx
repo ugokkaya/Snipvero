@@ -11,6 +11,16 @@ const icon = (path: ReactNode, size = 16) => (
 export const CaptureIcon = ({ size }: { size?: number }) =>
   icon(<path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10" />, size);
 
+/** A ring with a dot: the record symbol. */
+export const RecordIcon = ({ size }: { size?: number }) =>
+  icon(
+    <>
+      <circle cx="8" cy="8" r="5.5" />
+      <circle cx="8" cy="8" r="2.3" className="icon-filled" />
+    </>,
+    size,
+  );
+
 export const AnnotateIcon = () =>
   icon(
     <>

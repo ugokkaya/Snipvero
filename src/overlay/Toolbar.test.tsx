@@ -17,6 +17,7 @@ it("shows custom tooltips for every tool, including disabled actions, without ch
     root.render(
       <Toolbar
         position={{ x: 0, y: 0 }}
+        mode="capture"
         tool="select"
         style={INITIAL_EDITOR.annotate.style}
         controls={{ color: true, size: true }}
@@ -28,6 +29,7 @@ it("shows custom tooltips for every tool, including disabled actions, without ch
         send={send}
         onExport={onExport}
         onCaptureDelayed={vi.fn()}
+        onRecord={vi.fn()}
       />,
     ),
   );
@@ -75,6 +77,7 @@ it("offers a five-second recapture, warns about annotations and disables it duri
       root.render(
         <Toolbar
           position={{ x: 0, y: 0 }}
+          mode="capture"
           tool="select"
           style={INITIAL_EDITOR.annotate.style}
           controls={{ color: true, size: true }}
@@ -86,6 +89,7 @@ it("offers a five-second recapture, warns about annotations and disables it duri
           send={vi.fn()}
           onExport={vi.fn()}
           onCaptureDelayed={onCaptureDelayed}
+          onRecord={vi.fn()}
         />,
       ),
     );
@@ -113,6 +117,7 @@ it("offers fill, blur and highlight, and dims the style buttons they do not use"
       root.render(
         <Toolbar
           position={{ x: 0, y: 0 }}
+          mode="capture"
           tool="blur"
           style={INITIAL_EDITOR.annotate.style}
           controls={controls}
@@ -124,6 +129,7 @@ it("offers fill, blur and highlight, and dims the style buttons they do not use"
           send={send}
           onExport={vi.fn()}
           onCaptureDelayed={vi.fn()}
+          onRecord={vi.fn()}
         />,
       ),
     );
@@ -153,5 +159,55 @@ it("offers fill, blur and highlight, and dims the style buttons they do not use"
     expect(send).toHaveBeenCalledWith({ type: "setTool", tool: "highlight" });
   } finally {
     act(() => root.unmount());
+  }
+});
+
+it("offers recording in the capture toolbar and alone in the record-only toolbar", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const onRecord = vi.fn();
+  const render = (mode: "capture" | "record", canExport = true) =>
+    act(() =>
+      root.render(
+        <Toolbar
+          position={{ x: 0, y: 0 }}
+          mode={mode}
+          tool="select"
+          style={INITIAL_EDITOR.annotate.style}
+          controls={{ color: true, size: true }}
+          canUndo={false}
+          canRedo={false}
+          canDelete={false}
+          canExport={canExport}
+          keys={{ undo: "", redo: "", copy: "", save: "" }}
+          send={vi.fn()}
+          onExport={vi.fn()}
+          onCaptureDelayed={vi.fn()}
+          onRecord={onRecord}
+        />,
+      ),
+    );
+  try {
+    render("capture");
+    const record = container.querySelector<HTMLButtonElement>('button[aria-label^="Record"]');
+    expect(record?.getAttribute("aria-label")).toContain("annotations are not recorded");
+    act(() => record?.click());
+    expect(onRecord).toHaveBeenCalledOnce();
+
+    // Choosing a region to record needs no annotation tools: just the labelled button.
+    render("record");
+    const buttons = container.querySelectorAll("button");
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]?.textContent).toBe("Record");
+    act(() => buttons[0]?.click());
+    expect(onRecord).toHaveBeenCalledTimes(2);
+
+    // Disabled while another action (a recording starting) runs, so it cannot start twice.
+    render("record", false);
+    expect(container.querySelector("button")?.disabled).toBe(true);
+  } finally {
+    act(() => root.unmount());
+    container.remove();
   }
 });

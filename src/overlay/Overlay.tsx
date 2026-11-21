@@ -20,6 +20,8 @@ import {
   overlayReady,
   overlaySave,
   overlaySelect,
+  MICROPHONE_UNAVAILABLE,
+  recordingStart,
   type FrameInfo,
 } from "../ipc";
 import { detectPlatform } from "../platform";
@@ -42,7 +44,7 @@ import { measureLine } from "./measure";
 import { isDragging, selectedRegion, selectionRect } from "./selection";
 import { SelectionView } from "./SelectionView";
 import { TextEditor } from "./TextEditor";
-import { TOOLBAR_SIZE, Toolbar } from "./Toolbar";
+import { Toolbar, toolbarSize } from "./Toolbar";
 
 // Konva is most of the bundle: keep it out of the main window and off the path to showing the
 // frame. Each overlay preloads it once the frame is visible, before the first annotation.
@@ -55,6 +57,8 @@ const loadRasterizer = () => import("./rasterize");
 /** For actions that do not depend on the frame (clear, cancel). */
 const NO_ENV: EditorEnv = editorEnv({ width: 1, height: 1 }, { width: 1, height: 1 }, () => 0);
 const TOOLBAR_GAP = 8;
+const MICROPHONE_NOTICE =
+  "The microphone is switched on, but Snipvero is not allowed to use it. Allow it in System Settings → Privacy & Security → Microphone, or record without it.";
 
 const PLATFORM = detectPlatform(navigator.userAgent);
 const KEYS =
@@ -99,6 +103,8 @@ export function Overlay({ index }: { index: number }) {
   const [exporting, setExporting] = useState(false);
   const delaying = useRef(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // The microphone is switched on but the system does not allow it: offer to go on without it.
+  const [microphoneOffer, setMicrophoneOffer] = useState(false);
   const { selection, annotate } = state;
 
   const env = useMemo(() => info && editorEnv(info.bounds, info, measureLine), [info]);
@@ -217,7 +223,7 @@ export function Overlay({ index }: { index: number }) {
    * dialog or an error the overlay stays as it was.
    */
   const exportImage = (action: ExportAction) => {
-    if (!info || !env || exporter.running || delaying.current) return;
+    if (!info || !env || exporter.running || delaying.current || info.mode === "record") return;
     let current = state;
     if (current.annotate.gesture?.type === "editing") {
       const commit = { type: "commitText" } as const;
@@ -261,6 +267,30 @@ export function Overlay({ index }: { index: number }) {
     });
   };
 
+  /**
+   * Records the selected region. Annotations are not part of a video. On success Rust closes the
+   * overlays before the first frame, so there is nothing more to do here.
+   */
+  const record = (withoutMicrophone = false) => {
+    if (!info || !region || exporter.running || delaying.current) return;
+    delaying.current = true;
+    setExporting(true);
+    setNotice(null);
+    setMicrophoneOffer(false);
+    void recordingStart(info.session, region, withoutMicrophone).catch((error: unknown) => {
+      delaying.current = false;
+      setExporting(false);
+      // A microphone that is switched on but not allowed is never dropped silently: the choice is
+      // the user's, here, with the selection still on screen.
+      if (error === MICROPHONE_UNAVAILABLE) {
+        setMicrophoneOffer(true);
+        setNotice(MICROPHONE_NOTICE);
+      } else {
+        setNotice(String(error));
+      }
+    });
+  };
+
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (!info || event.button !== 0) return;
     event.preventDefault(); // No text selection or native drag.
@@ -284,17 +314,18 @@ export function Overlay({ index }: { index: number }) {
   const editing = annotate.gesture?.type === "editing" ? annotate.gesture.draft : null;
   // A selected annotation decides which style buttons act (a tool only draws the next one).
   const selectedKind = selectedAnnotation(annotate)?.kind ?? null;
+  const size = info && toolbarSize(info.mode);
   const toolbar =
-    info && region
+    info && region && size
       ? {
           ...placeOutside(
             pixelToClient(region, info.bounds, info),
-            TOOLBAR_SIZE,
+            size,
             info.bounds,
             TOOLBAR_GAP,
             "below",
           ),
-          ...TOOLBAR_SIZE,
+          ...size,
         }
       : null;
   return (
@@ -345,9 +376,10 @@ export function Overlay({ index }: { index: number }) {
           onCommit={() => send({ type: "commitText" })}
         />
       )}
-      {toolbar && (
+      {toolbar && info && (
         <Toolbar
           position={toolbar}
+          mode={info.mode}
           tool={annotate.tool}
           style={annotate.style}
           controls={styleControls(selectedKind ?? annotate.tool)}
@@ -359,16 +391,26 @@ export function Overlay({ index }: { index: number }) {
           send={send}
           onExport={exportImage}
           onCaptureDelayed={captureDelayed}
+          onRecord={() => record()}
         />
       )}
       {notice ? (
         <div className="overlay-hud overlay-notice" role="alert">
           {notice}
+          {microphoneOffer && (
+            <button type="button" className="overlay-offer" onClick={() => record(true)}>
+              Record without microphone
+            </button>
+          )}
         </div>
       ) : (
         info?.focused &&
         selection.phase === "idle" && (
-          <div className="overlay-hud">Drag to select · Esc to cancel</div>
+          <div className="overlay-hud">
+            {info.mode === "record"
+              ? "Drag to select the area to record · Esc to cancel"
+              : "Drag to select · Esc to cancel"}
+          </div>
         )
       )}
     </div>

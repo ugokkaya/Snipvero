@@ -1,6 +1,6 @@
 // Typed wrappers around Tauri commands and events.
 // Event names must match `src-tauri/src/events.rs`; commands are registered in `src-tauri/src/lib.rs`.
-import { Channel, invoke } from "@tauri-apps/api/core";
+import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { Rect } from "./overlay/coords";
@@ -11,6 +11,12 @@ export const OVERLAY_SELECTION_CLEARED = "overlay-selection-cleared";
 export const OVERLAY_LABEL_PREFIX = "overlay-";
 export const ABOUT_LABEL = "about";
 export const UPDATE_CHECK_REQUESTED = "update-check-requested";
+export const RECORDING_STATE = "recording-state";
+export const RECORDING_FAILED = "recording-failed";
+export const RECORDING_EXPORT_PROGRESS = "recording-export-progress";
+export const RECORDING_LABEL = "recording";
+/** URI scheme of the review window's video; Rust serves only the finished recording (ADR-037). */
+export const RECORDING_PROTOCOL = "snipvero-recording";
 
 export interface LogicalRect {
   x: number;
@@ -29,6 +35,8 @@ export interface FrameInfo {
   height: number;
   focused: boolean;
   region: Rect | null;
+  /** `record`: the overlay only chooses a region to record. */
+  mode: "capture" | "record";
 }
 
 export interface ShortcutStatus {
@@ -219,3 +227,158 @@ export function onUpdateCheckRequested(handler: () => void): Promise<UnlistenFn>
 
 /** Stops a running download; nothing has been installed at that point. */
 export const cancelUpdate = () => invoke("update_cancel");
+
+/** Where a recording is (`recording::Phase` in Rust). */
+export type RecordingPhase = "idle" | "starting" | "recording" | "stopping" | "finished";
+
+/** `recording::RecordingStatus`, sent on every state change, never per frame. */
+export interface RecordingStatus {
+  supported: boolean;
+  phase: RecordingPhase;
+  /** Opaque id of the current recording; null while idle. The page never gets a path. */
+  id: number | null;
+  elapsedMs: number;
+  capMs: number;
+  width: number;
+  height: number;
+  bytes: number;
+  durationMs: number | null;
+  /** Why the recording ended other than by the user (the maximum length, an encoder error), and what went wrong with the sound. */
+  notice: string | null;
+  /** The sound sources this recording has; both false is a silent video. */
+  systemAudio: boolean;
+  microphone: boolean;
+  /** The widest GIF this recording can be exported as, and the width and frame rate it starts at. */
+  gifMaxWidth: number;
+  gifDefaultWidth: number;
+  gifDefaultFps: number;
+}
+
+/** `recording::MicrophoneAccess`. `unsupported`: this platform cannot record sound yet. */
+export type MicrophoneAccess =
+  "notDetermined" | "authorized" | "denied" | "restricted" | "unsupported";
+
+/** `recording::AudioStatus`: the stored sound choices (both off by default) and the permission. */
+export interface AudioStatus {
+  supported: boolean;
+  system: boolean;
+  /** The stored choice; it only counts while `microphoneAccess` is `authorized`. */
+  microphone: boolean;
+  microphoneAccess: MicrophoneAccess;
+}
+
+/**
+ * What `recordingStart` rejects with when the microphone is switched on but not allowed (not yet
+ * asked, denied or turned off in System Settings). The overlay then offers to record without it.
+ * Mirrors `recording::MICROPHONE_UNAVAILABLE`.
+ */
+export const MICROPHONE_UNAVAILABLE = "microphoneUnavailable";
+
+/** `system` needs only the Screen Recording permission; `microphone` may show the system prompt. */
+export type AudioKind = "system" | "microphone";
+
+/** The stored sound choices and the microphone permission. Never prompts. */
+export const recordingAudio = () => invoke<AudioStatus>("recording_audio");
+
+/**
+ * Switches a sound source on or off and remembers it. Turning the microphone on is when the system
+ * asks for permission (once); a microphone that is not allowed stays off in the answer.
+ */
+export const recordingSetAudio = (kind: AudioKind, enabled: boolean) =>
+  invoke<AudioStatus>("recording_set_audio", { kind, enabled });
+
+/** Opens System Settings → Privacy & Security → Microphone. */
+export const openMicrophoneSettings = () => invoke("open_microphone_settings");
+
+/**
+ * Records `region` (frame pixels) of the display this overlay shows. On success Rust closes the
+ * overlays first, so the selection is never in the video; the tray then stops the recording. The
+ * sound comes from the stored choices; a microphone that is switched on but not allowed rejects with
+ * `MICROPHONE_UNAVAILABLE` unless `withoutMicrophone` says to go on without it.
+ */
+export const recordingStart = (session: number, region: Rect, withoutMicrophone = false) =>
+  invoke<RecordingStatus>("recording_start", { session, region, withoutMicrophone });
+
+export const recordingStatus = () => invoke<RecordingStatus>("recording_status");
+
+/** Same as the tray row: start choosing a region, stop the running recording, or review the last. */
+export const startRecording = () => invoke("start_recording");
+
+/** Deletes the finished recording and closes its window. */
+export const recordingDiscard = (id: number) => invoke("recording_discard", { id });
+
+/** Asks where to save the MP4; on `done` the temporary file is gone. */
+export const recordingSave = (id: number, fileName: string) =>
+  invoke<ExportOutcome>("recording_save", { id, fileName });
+
+/** The file itself (to paste in Finder) or its path, valid until the recording is deleted. */
+export const recordingCopy = (id: number, kind: "file" | "path") =>
+  invoke("recording_copy", { id, kind });
+
+/** The video element's source for a finished recording. */
+export const recordingSource = (id: number) => convertFileSrc(String(id), RECORDING_PROTOCOL);
+
+/** What the user chose for a GIF (`gif::GifOptions`): frame rate and output width in pixels. */
+export interface GifOptions {
+  fps: number;
+  width: number;
+}
+
+/** `gif::GifPlan`: what an export with the chosen options produces. */
+export interface GifPlan {
+  width: number;
+  height: number;
+  fps: number;
+  /** The most pictures the GIF can have (identical neighbours are merged, so often fewer). */
+  ticks: number;
+  estimatedBytes: number;
+}
+
+/**
+ * What a GIF export would produce, or why it cannot be made (rejects with the reason: a recording
+ * longer than 60 seconds, a rate or width outside the limits).
+ */
+export const recordingGifPlan = (id: number, options: GifOptions) =>
+  invoke<GifPlan>("recording_gif_plan", { id, options });
+
+/** `recording::GifExport`; `bytes` and `frames` are 0 when the save dialog was dismissed. */
+export interface GifExport {
+  outcome: ExportOutcome;
+  bytes: number;
+  frames: number;
+}
+
+/**
+ * Asks where to save a GIF (`*.gif` only), then exports the finished recording. The MP4 is not
+ * touched. Resolves with `cancelled` for a dismissed dialog or a cancelled export; rejects with a
+ * message on failure. Progress arrives as `recording-export-progress` events.
+ */
+export const recordingExportGif = (id: number, fileName: string, options: GifOptions) =>
+  invoke<GifExport>("recording_export_gif", { id, fileName, options });
+
+/** Stops a running GIF export; nothing is left behind. */
+export const recordingCancelGifExport = (id: number) =>
+  invoke("recording_cancel_gif_export", { id });
+
+/** `recording::ExportProgress`: sent about ten times a second while exporting, then once at the end. */
+export interface GifExportProgress {
+  id: number;
+  phase: "running" | "done" | "cancelled" | "failed";
+  /** 0..1 by the recording's own clock. */
+  fraction: number;
+  message: string | null;
+}
+
+export function onRecordingExportProgress(
+  handler: (progress: GifExportProgress) => void,
+): Promise<UnlistenFn> {
+  return listen<GifExportProgress>(RECORDING_EXPORT_PROGRESS, (event) => handler(event.payload));
+}
+
+export function onRecordingState(handler: (status: RecordingStatus) => void): Promise<UnlistenFn> {
+  return listen<RecordingStatus>(RECORDING_STATE, (event) => handler(event.payload));
+}
+
+export function onRecordingFailed(handler: (message: string) => void): Promise<UnlistenFn> {
+  return listen<string>(RECORDING_FAILED, (event) => handler(event.payload));
+}

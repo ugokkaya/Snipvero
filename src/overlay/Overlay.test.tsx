@@ -14,6 +14,8 @@ const ipc = vi.hoisted(() => ({
   overlayReady: vi.fn(() => Promise.resolve()),
   overlaySave: vi.fn(),
   overlaySelect: vi.fn(() => Promise.resolve()),
+  recordingStart: vi.fn(),
+  MICROPHONE_UNAVAILABLE: "microphoneUnavailable",
 }));
 vi.mock("../ipc", () => ipc);
 vi.mock("../frame", () => ({ loadFrame: vi.fn(() => Promise.resolve({ close: vi.fn() })) }));
@@ -34,6 +36,7 @@ const INFO: FrameInfo = {
   scale: 2,
   focused: true,
   region: REGION,
+  mode: "capture",
 };
 let root: Root;
 let container: HTMLDivElement;
@@ -91,4 +94,64 @@ it("shows a rejected request and permits another attempt", async () => {
   expect(timer().disabled).toBe(false);
   await act(async () => timer().click());
   expect(ipc.overlayCaptureDelayed).toHaveBeenCalledTimes(2);
+});
+
+function recordButton() {
+  const button = container.querySelector<HTMLButtonElement>('button[aria-label^="Record"]');
+  if (!button) throw new Error("missing record button");
+  return button;
+}
+
+it("starts a recording of the selected region once, without annotations or an export", async () => {
+  ipc.recordingStart.mockResolvedValue({ phase: "starting" });
+  await act(async () => root.render(<Overlay index={0} />));
+  await act(async () => {
+    recordButton().click();
+    recordButton().click();
+  });
+  expect(ipc.recordingStart).toHaveBeenCalledExactlyOnceWith(1, REGION, false);
+  expect(ipc.overlayCopy).not.toHaveBeenCalled();
+  expect(ipc.overlaySave).not.toHaveBeenCalled();
+  // Rust closes the overlays on success; until then nothing else may start.
+  expect(recordButton().disabled).toBe(true);
+});
+
+it("shows why a recording could not start and permits another attempt", async () => {
+  ipc.recordingStart.mockRejectedValueOnce("The region is too small to record.");
+  await act(async () => root.render(<Overlay index={0} />));
+  await act(async () => recordButton().click());
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+    "The region is too small to record.",
+  );
+  expect(recordButton().disabled).toBe(false);
+});
+
+it("offers to record without a microphone that is switched on but not allowed", async () => {
+  ipc.recordingStart.mockRejectedValueOnce("microphoneUnavailable");
+  await act(async () => root.render(<Overlay index={0} />));
+  await act(async () => recordButton().click());
+  const alert = container.querySelector('[role="alert"]');
+  expect(alert?.textContent).toContain("not allowed to use it");
+  expect(alert?.textContent).not.toContain("microphoneUnavailable");
+  expect(recordButton().disabled).toBe(false);
+  const offer = [...(alert?.querySelectorAll("button") ?? [])].find((b) =>
+    b.textContent?.includes("Record without microphone"),
+  );
+  if (!offer) throw new Error("no offer to record without the microphone");
+  // The user's choice, not a silent fallback: only now does it go on without the microphone.
+  ipc.recordingStart.mockResolvedValue({ phase: "starting" });
+  await act(async () => offer.click());
+  expect(ipc.recordingStart).toHaveBeenLastCalledWith(1, REGION, true);
+  expect(container.querySelector(".overlay-offer")).toBeNull();
+});
+
+it("only chooses a region to record when opened from the record entry", async () => {
+  ipc.frameInfo.mockResolvedValue({ ...INFO, mode: "record" });
+  ipc.recordingStart.mockResolvedValue({ phase: "starting" });
+  await act(async () => root.render(<Overlay index={0} />));
+  // No annotation tools or screenshot actions: one labelled button.
+  expect(container.querySelectorAll(".toolbar button")).toHaveLength(1);
+  expect(container.textContent).toContain("Record");
+  await act(async () => recordButton().click());
+  expect(ipc.recordingStart).toHaveBeenCalledWith(1, REGION, false);
 });

@@ -9,6 +9,7 @@ use tauri::{
 };
 
 use crate::login_item;
+use crate::recording;
 
 /// Black-and-alpha template image (`icons/source/tray-template.svg`, 18 pt at 2×). macOS tints a
 /// template image itself, so one asset fits light and dark menu bars and tinted states. Windows
@@ -24,6 +25,7 @@ const EXIT_LABEL: &str = "Exit";
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrayAction {
     Capture,
+    Record,
     Open,
     OpenAtLogin,
     About,
@@ -43,6 +45,7 @@ enum Entry {
 fn menu(open_at_login: bool) -> Vec<Entry> {
     let mut entries = vec![
         Entry::Item(TrayAction::Capture),
+        Entry::Item(TrayAction::Record),
         Entry::Item(TrayAction::Open),
         Entry::Separator,
     ];
@@ -57,6 +60,9 @@ fn menu(open_at_login: bool) -> Vec<Entry> {
     entries
 }
 
+/// The recording row, whose label and availability follow the recording's phase.
+struct RecordItem(MenuItem<Wry>);
+
 /// The checkable **Open at Login** item, kept to show the OS's current state (ADR-033).
 struct OpenAtLoginItem {
     item: CheckMenuItem<Wry>,
@@ -65,8 +71,9 @@ struct OpenAtLoginItem {
 }
 
 impl TrayAction {
-    const ALL: [TrayAction; 6] = [
+    const ALL: [TrayAction; 7] = [
         TrayAction::Capture,
+        TrayAction::Record,
         TrayAction::Open,
         TrayAction::OpenAtLogin,
         TrayAction::About,
@@ -77,6 +84,7 @@ impl TrayAction {
     pub fn id(self) -> &'static str {
         match self {
             TrayAction::Capture => "capture",
+            TrayAction::Record => "record",
             TrayAction::Open => "open",
             TrayAction::OpenAtLogin => "open-at-login",
             TrayAction::About => "about",
@@ -92,6 +100,7 @@ impl TrayAction {
     fn label(self) -> &'static str {
         match self {
             TrayAction::Capture => "Capture",
+            TrayAction::Record => recording::menu_entry(recording::Phase::Idle).0,
             TrayAction::Open => "Open Snipvero",
             TrayAction::OpenAtLogin => "Open at Login",
             TrayAction::About => "About Snipvero",
@@ -123,13 +132,11 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                 refresh_open_at_login(app);
             }
             Entry::Item(action) => {
-                menu.append(&MenuItem::with_id(
-                    app,
-                    action.id(),
-                    action.label(),
-                    true,
-                    None::<&str>,
-                )?)?;
+                let item = MenuItem::with_id(app, action.id(), action.label(), true, None::<&str>)?;
+                menu.append(&item)?;
+                if action == TrayAction::Record {
+                    app.manage(RecordItem(item));
+                }
             }
             Entry::Separator => menu.append(&PredefinedMenuItem::separator(app)?)?,
         }
@@ -160,6 +167,30 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     }
     builder.build(app)?;
     Ok(())
+}
+
+/// Shows the recording's phase in the tray: the row's label (Stop Recording while it runs) and,
+/// next to the icon, a red dot and the elapsed time. Safe from any thread.
+pub fn show_recording(app: &AppHandle, phase: recording::Phase, elapsed: std::time::Duration) {
+    let (label, enabled) = recording::menu_entry(phase);
+    if let Some(item) = app.try_state::<RecordItem>()
+        && let Err(err) = item
+            .0
+            .set_text(label)
+            .and_then(|()| item.0.set_enabled(enabled))
+    {
+        eprintln!("[tray] recording row: {err}");
+    }
+    let title = matches!(
+        phase,
+        recording::Phase::Recording | recording::Phase::Stopping
+    )
+    .then(|| format!("● {}", recording::clock(elapsed)));
+    if let Some(tray) = app.tray_by_id("main")
+        && let Err(err) = tray.set_title(title)
+    {
+        eprintln!("[tray] recording title: {err}");
+    }
 }
 
 /// A click sends one event when the button goes down and one when it comes up; one read is enough.
@@ -268,6 +299,7 @@ mod tests {
             labels(&entries),
             [
                 "Capture",
+                "Record Region",
                 "Open Snipvero",
                 "---",
                 "Open at Login",
@@ -292,6 +324,7 @@ mod tests {
             labels(&menu(false)),
             [
                 "Capture",
+                "Record Region",
                 "Open Snipvero",
                 "---",
                 "About Snipvero",

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissions for the main window, the About window and capture overlays.",
-  "windows": ["main", "about", "overlay-*"],
+  "description": "Permissions for the main window, the About window, the recording review and capture overlays.",
+  "windows": ["main", "about", "recording", "overlay-*"],
   "permissions": ["core:default"]
 }

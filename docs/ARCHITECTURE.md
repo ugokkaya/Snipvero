@@ -14,7 +14,7 @@ overlays and the annotation UI (Konva.js via react-konva).
 
 ```
 index.html, src/              React frontend (every window loads index.html)
-  main.tsx                    renders App, About or Overlay based on the window label (route.ts)
+  main.tsx                    renders App, About, RecordingReview or Overlay based on the window label (route.ts)
   route.ts                    pure window label → view mapping
   App.tsx                     main window: Capture Region, features, permission/shortcut status, About, GitHub;
                               sizes the window to its content (useFitWindow.ts, fit.ts)
@@ -29,7 +29,14 @@ index.html, src/              React frontend (every window loads index.html)
   overlay/SelectionView.tsx   dim, border, handles, size label (visual only, no pointer input)
   overlay/AnnotationLayer.tsx Konva stage over the region (visual only; lazily loaded chunk)
   overlay/TextEditor.tsx      textarea for the text being edited
-  overlay/Toolbar.tsx         floating toolbar (tools, colours, sizes, undo/redo/delete, copy/save)
+  overlay/Toolbar.tsx         floating toolbar (tools, colours, sizes, undo/redo/delete, copy/save, record);
+                              only a Record button when the overlay was opened to choose a region to record
+  recording/RecordingAudio.tsx   the two sound switches of the main window, microphone guidance
+  recording/audio.ts          pure microphone view state and sound label
+  recording/RecordingReview.tsx  review window: video preview, Save…, Copy File/Path, Export as GIF… (panel), Discard
+  recording/GifExport.tsx     the GIF export panel: frame rate, width, estimate, progress, Cancel
+  recording/gif.ts            pure width/rate choices, estimate wording, `*.gif` file name
+  recording/format.ts         pure clock, byte size and `*.mp4` file name formatting
   overlay/selection.ts        pure selection model: state machine, hit testing, cursors, resizeRect
   overlay/annotations.ts      pure annotation data and geometry (arrow head, bounds, hit tests, styles)
   overlay/annotate.ts         pure annotation reducer: tools, selected annotation, gestures, undo/redo
@@ -47,11 +54,11 @@ src-tauri/
   tauri.conf.json             app config (identifier, CSP incl. ipc:, ad-hoc macOS signing)
   Info.plist                  macOS: LSUIElement (menu bar app, no Dock icon)
   icons/                      app icons generated from icons/source/app-icon.svg; tray-template.png (macOS menu bar)
-  capabilities/default.json   frontend permissions for "main", "about" and "overlay-*" (core:default)
+  capabilities/default.json   frontend permissions for "main", "about", "recording" and "overlay-*" (core:default)
   capabilities/fit-to-content.json  main, about: window:allow-set-size (fit to content)
   capabilities/about.json     about: window:allow-close (Escape); no window has an `updater:` permission
   src/lib.rs                  builder, single instance, close→hide, exit policy, command registration
-  src/tray.rs                 tray icon (macOS: template image) and menu (Capture, Open Snipvero, Open at Login [macOS], About Snipvero, Check for Updates…, Quit)
+  src/tray.rs                 tray icon (macOS: template image) and menu (Capture, Record Region / Stop Recording, Open Snipvero, Open at Login [macOS], About Snipvero, Check for Updates…, Quit)
   src/login_item/{mod,macos}.rs  Open at Login (SMAppService.mainApp) and login-launch detection (ADR-033)
    src/about.rs                About window (created on demand), app metadata, fixed links (website, repository, contributors, license)
   src/update.rs               user-started update check, download, install and restart (tauri-plugin-updater, ADR-028)
@@ -59,7 +66,8 @@ src-tauri/
   src/settings.rs             settings.json in the app config directory (capture shortcut), atomic writes (ADR-030)
   src/system/{mod,macos}.rs   previous-app focus restoration, fixed System Settings URL, open URL / file (NSWorkspace)
   src/events.rs               event names shared with the frontend
-  src/geometry.rs             pure coordinate math (LogicalRect, PixelRect, physical size, Cocoa flip)
+  src/geometry.rs             pure coordinate math (LogicalRect, PixelRect, physical size, Cocoa flip) and
+                              recording geometry (even output size, region → display points, bitrate)
   src/capture/mod.rs          platform-independent capture interface (Frame, errors)
   src/capture/macos.rs        ScreenCaptureKit backend
   src/overlay/mod.rs          capture session state (incl. the one selection), overlay windows, overlay commands,
@@ -69,11 +77,24 @@ src-tauri/
    src/overlay/delayed.rs      five-second recapture: hide, restore focus, read fresh pixels, validate display,
                                reload the editor with the same region and a new session ID (ADR-035)
    src/overlay/macos/countdown.rs  native nonactivating, click-through countdown panel and blinking border
+  src/recording/mod.rs        recording state machine, cap/monitor, commands, review window, preview protocol,
+                              startup/exit cleanup (ADR-037)
+  src/recording/macos.rs      SCStream + AVAssetWriter (H.264 MP4), free space, clipboard
+  src/recording/macos/audio.rs  optional audio: SCK system audio and AVCaptureSession microphone decoded to
+                              stereo f32, AAC writer input, permission lookup/request (ADR-037)
+  src/recording/gif.rs        pure GIF export: limits, plan and size estimate, timeline resampling, box downscale,
+                              delays, `gif` encoder (tested on every OS)
+  src/recording/macos/reader.rs  MP4 → BGRA pictures through AVAssetReader (the GIF export's frame source)
+  src/recording/mixer.rs      pure mixing: timeline alignment on the host clock, gap filling, limiter, format
+                              conversion, resampling (tested on every OS)
+  src/recording/windows.rs    unsupported stub (compiles only)
+  src/recording/tempfiles.rs  private 0700 per-launch folder, stale cleanup, free-space maths (pure)
   src/export/mod.rs           crop + blend + PNG, request validation, overlay_copy / overlay_save, save dialog
   src/export/macos.rs         NSPasteboard (PNG + TIFF)
   src/export/windows.rs       clipboard via arboard (CI-tested only)
   src/transfer.rs             BGRA → RGBA conversion
-  src/devtools.rs             --stress=N capture/cancel and --stress-export=N capture/export harness
+  src/devtools.rs             --stress=N capture/cancel, --stress-export=N capture/export and
+                              --stress-record=N record/discard harness
 ```
 
 ## App lifecycle
@@ -193,7 +214,7 @@ Rust            ─▶ Session.begin_export (session, region fits, layer size, n
   (`rect`), text (`at`, `text`), fill, highlight and blur (`rect`; blur also a mosaic `block`), each
   with an id, colour (not blur) and stroke width or font size (not fill, highlight, blur). Blur is
   cut from the frame canvas by `mosaic.ts` with the pure `pixelate.ts`, in the preview and in
-  `rasterize.ts` alike, and always drawn under the other annotations (ADR-037). All values are
+  `rasterize.ts` alike, and always drawn under the other annotations (ADR-038). All values are
   in frame physical pixels, relative to the region's top-left corner (`EditorState.origin`), so export
   can draw them onto the cropped region directly. Style presets are CSS sizes multiplied by the
   display's scale when an annotation is created, so strokes look the same on 1× and 2× displays.
@@ -268,6 +289,49 @@ Key design points:
   CSS size equals the display bounds, and the image/CSS ratio equals the scale (1.000 and 2.000).
 - **Platform code only where needed:** capture backend, overlay window level/focus, cursor location.
 
+## Recording
+
+One pipeline: a region of one display becomes a temporary MP4 (ADR-037).
+
+1. The overlay (opened by **Record Region**, or the normal capture with its **Record** button) reports the
+   selection as usual. `recording_start` validates the session and region, computes the geometry
+   (`geometry::recording_geometry`: even output size, display-local source rectangle in points, H.264
+   limits), checks free space, moves the state machine to `starting`, then closes the overlay with
+   `overlay::hand_off_to_recording`, which destroys the overlay windows but keeps the capture lock. The
+   recording holds that lock until it ends, so no capture, second recording or update install interleaves.
+2. After a short settle time a worker starts `SCStream` (`recording/macos.rs`): display filter excluding
+   Snipvero's own application, `sourceRect` = region, output size = even pixels, BGRA, 30 fps, cursor shown.
+   Frames arrive on a private serial queue; complete ones are appended to an `AVAssetWriter` H.264 input
+   (VideoToolbox hardware encoding inside AVFoundation). The state becomes `recording` only after the
+   stream runs.
+3. A monitor thread enforces the cap and the 1 GiB file guard with a monotonic deadline and keeps the tray
+   title and the red indicator (the countdown panel of `overlay/macos/countdown.rs`: a click-through border, plus a small clickable strip panel with the clock, a Stop button and the shortcut hint; the button stops from another thread so its panel is not torn down inside its own action) current. The tray row,
+   the capture shortcut and the main window's button end here: `recording::trigger`.
+4. Stop (user, cap, size, or a stream/encoder failure reported by the delegate) calls `begin_stop` once; a worker
+   stops the stream, ends the writer session at the host clock time (so a static screen still gives the right
+   length), finishes the file, and moves to `finished`, releases the capture lock and opens the review window.
+   A recording without any frame is discarded with a message.
+   **Audio (optional, ADR-037):** the stored switches are read in `recording_start` (before the overlay closes, so a
+   refused microphone leaves the selection up). System audio is requested on the same `SCStream`; the microphone runs
+   in an `AVCaptureSession`. Both feed `mixer::Mixer`; a pacer thread hands the mix up to 250 ms before now on the
+   host clock to one AAC `AVAssetWriterInput`, silence where a source has nothing, so the track is as long as the
+   video. With sound on, the last picture is held until the end (a still screen). With both switches off none of
+   this is created. `recording_audio` / `recording_set_audio` serve the main window; only the latter may prompt.
+5. The review window plays the file through the `snipvero-recording` protocol (`recording::serve`, range requests,
+   only the finished recording with the given id) and offers Save (native dialog from Rust, hidden sibling file
+   renamed over the target, then the temporary file is deleted), Copy File / Copy Path, Discard. The page knows an id, never a path.
+6. **GIF export (ADR-037, task 4)** is an export of the finished MP4, not a second pipeline. `recording_gif_plan` asks
+   `gif::plan` for the output size and estimate (or the reason it is refused: over 60 s, a rate above 15, a width above
+   800 px or the video's). `recording_export_gif` re-checks, holds the recording's `saving` guard, asks for a `*.gif` name
+   with `rfd`, then a worker runs `gif::export`: `macos/reader.rs` decodes the MP4 picture by picture (BGRA, locked,
+   handed over, released), `GifWriter` scales each picture with a box filter, resamples the video's timeline to a fixed
+   clock of `fps` ticks (timing from timestamps, so a still screen is one long frame), merges identical neighbours and
+   writes frames with the `gif` crate into a hidden sibling file that `export::replace_with` renames over the target.
+   `recording-export-progress` reports the fraction (about ten per second); `recording_cancel_gif_export` sets a flag the
+   reader checks before every picture. At most three scaled pictures are in memory. The MP4 is untouched.
+7. The temporary folder `<per-user temp>/com.snipvero.app/recordings-<pid>-<nonce>/` is private (0700), created at the
+   first recording, removed at exit (`RunEvent::Exit`) and, for crashes, at the next launch.
+
 ## Updates
 
 Implemented on macOS (ADR-028); other platforms report updates as unavailable.
@@ -297,9 +361,11 @@ Download and Restart ─▶ update_install(progress channel)
 
 ## Security and privacy
 
-- CSP: `default-src 'self'`, plus `connect-src ipc: http://ipc.localhost` (required for fast IPC).
+- CSP: `default-src 'self'`, plus `connect-src ipc: http://ipc.localhost` (required for fast IPC) and
+  `media-src snipvero-recording: http://snipvero-recording.localhost` (the review window's video, served by Rust
+  from the one finished temporary recording; no path or remote origin).
   The experimental `snipframe:` protocol and its CSP allowances are removed. No remote origins.
-- Capabilities: `core:default` for `main`, `about` and `overlay-*`; in addition only
+- Capabilities: `core:default` for `main`, `about`, `recording` and `overlay-*`; in addition only
   `core:window:allow-set-size` for `main` and `about`, and `core:window:allow-close` for `about`. App commands are
   registered in `lib.rs`.
 - Network access exists only in the updater (ADR-028), only after **Check for Updates…**, from

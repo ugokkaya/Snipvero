@@ -28,6 +28,8 @@ check for updates.
   keyboard can type.
 - **Hide or mark areas:** cover an area with a solid **Fill**, **Blur** it into mosaic blocks that
   cannot be undone in the exported image, or tint it with a translucent **Highlight**.
+- **Screen recording (macOS):** record any region of one display as an MP4 video (H.264, 30 fps), with optional system audio and microphone, or export it as a GIF.
+  See [Screen recording](#screen-recording).
 - **Sharp on Retina:** the image keeps the display's full pixel resolution, including setups that
   mix Retina and standard displays.
 - **Copy or save:** copy to the clipboard (PNG and TIFF) or save a PNG through the standard save
@@ -182,10 +184,47 @@ message in your default email app; Snipvero does not send email itself.
 macOS blocks it on other Macs; [docs/RELEASE.md](docs/RELEASE.md) describes signing and
 notarization for distribution.
 
+### Screen recording
+
+Choose **Record Region** in the menu bar (or in the Snipvero window), drag to select the area and
+click **Record**. You can also click the record button at the end of the screenshot toolbar after
+selecting a region. The selection screen closes first, so it is never in the video, and Snipvero's own
+windows are never recorded. A red border marks the area while it records, with a small red strip beside it:
+the elapsed time, a **Stop** button and a reminder of the shortcut that also stops (for example "or press ⇧⌘2").
+The strip never takes focus from the app you are recording and is not in the video. The menu bar shows a red dot
+with the elapsed time too.
+
+- **Stop** with the **Stop** button on the red strip, **Stop Recording** in the menu bar or by pressing your capture shortcut again. A
+  recording also stops by itself after five minutes (the maximum length); you are told so.
+- **Sound is off by default.** Under **Record Region** in the Snipvero window, **System audio** (what the
+  computer plays) and **Microphone** are two separate switches, remembered between launches. System audio
+  needs no permission beyond Screen Recording. The first time you turn on the microphone, macOS asks for
+  permission; if you decline, the switch stays off and the window explains how to allow it in **System
+  Settings → Privacy & Security → Microphone**. If the permission is turned off later, recording says so and
+  offers to record without the microphone; it never drops the microphone silently. With both switches off,
+  Snipvero never touches the microphone. Both sources are mixed into one stereo AAC track, and the
+  recording window says which sound the video has.
+- The video shows the mouse pointer. It is 30 frames per second at the region's full pixel
+  size (rounded down to even numbers), so the region must be at least 16 × 16 pixels and no larger than
+  8192 pixels per side and about 9.4 megapixels (for example 3840 × 2160). Larger regions are refused with a message.
+- When it ends, a window plays the recording back. **Save…** writes an MP4 where you choose, **Copy File** and
+  **Copy Path** put the file or its location on the clipboard, and **Discard** deletes it. Closing the window
+  keeps the recording until you save it, discard it or quit; **Review Last Recording…** in the menu bar reopens it.
+  You cannot start another recording meanwhile.
+- **Export as GIF…** makes a GIF from the recording: choose a frame rate (5, 10 or 15 fps, 10 by default) and a
+  width (up to 800 pixels and never wider than the video; the default is the region's width in points, so a
+  Retina recording is not doubled). The window shows the size and an estimate of the file size before you
+  save, then a progress bar and **Cancel export**. A GIF is made from at most 60 seconds of video; for a longer
+  recording Snipvero says so and you can save the MP4 instead. A still screen becomes one frame that lasts as
+  long as the recording. The GIF is its own file: the recording is untouched and can still be saved as MP4.
+- Annotations are not part of a video. Windows has no recording yet.
+- The longest length can be changed by adding `"recordingMaxSeconds": 120` (10 to 600) to `settings.json`.
+
 ## Screen Recording permission
 
 macOS asks for permission before any app can read the screen. Snipvero needs it to take a
-screenshot; it does not record video or audio.
+screenshot or to record a region. Recording sound is optional: system audio uses the same permission, and
+the microphone has its own (see [Screen recording](#screen-recording)).
 
 1. Press the capture shortcut or choose **Capture** in the menu bar. macOS shows a permission prompt.
 2. Open **System Settings → Privacy & Security → Screen & System Audio Recording** (the Snipvero
@@ -227,6 +266,7 @@ General › Login Items, where you can also turn it off.
 | -------------------------------------------------------------- | ------------------------------------------------------ |
 | <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>2</kbd>                   | Start a capture (anywhere; can be changed, see below)  |
 | <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>2</kbd> again             | Cancel the open capture, as <kbd>Esc</kbd> does        |
+| <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>2</kbd> while recording   | Stop the recording                                     |
 | <kbd>Return</kbd> or <kbd>Cmd</kbd>+<kbd>C</kbd>               | Copy the region to the clipboard and close             |
 | <kbd>Cmd</kbd>+<kbd>S</kbd>                                    | Save the region as PNG                                 |
 | <kbd>Cmd</kbd>+<kbd>Z</kbd>                                    | Undo                                                   |
@@ -259,8 +299,13 @@ If another app already uses the shortcut, the Snipvero window says so; choose an
   open in your browser, and only when you click them.
 - Screenshots are processed on your Mac and stay in memory; they are discarded when a capture
   ends. Nothing is written to disk unless you save a file, and then only the file you choose.
+  The exception is a screen recording, which is too large for memory: while it is made and until you
+  save or discard it, it is a temporary file in a private folder of your user account
+  (`com.snipvero.app` in the per-user temporary folder). It is deleted when you save it, discard it,
+  quit Snipvero, and at the next launch if Snipvero was force-quit. It is never uploaded. A GIF export
+  writes only the file you choose (through a hidden file next to it that is renamed, or removed if you cancel).
 - A capture shortcut you choose is stored in `~/Library/Application Support/com.snipvero.app/settings.json`.
-  The file holds only the shortcut.
+  The file holds only the shortcut and, if you set them, the recording length and the two sound switches.
 - Copying puts the image on the system clipboard, where other apps can read it, as with any copy.
 
 ## Known limitations
@@ -269,6 +314,8 @@ If another app already uses the shortcut, the Snipvero window says so; choose an
 - A selection stays on one display; it cannot span several displays.
 - Only the capture shortcut and Open at Login can be changed: colours and sizes are fixed.
 - Unplugging or rearranging displays during a capture ends that capture.
+- Recording is macOS only and limited to one region of one display (5K and larger displays can
+  record parts of their screen, not all of it). Only one unsaved recording is kept at a time.
 - Apple silicon only; Intel Macs are untested.
 
 ## Development

@@ -15,6 +15,20 @@ pub struct Settings {
     /// Capture accelerator; `None` means the default (`shortcut::DEFAULT_ACCELERATOR`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shortcut: Option<String>,
+    /// Longest recording in seconds; `None` means the default. Clamped where it is used
+    /// (`recording::cap_from_setting`); there is no screen for it yet (ADR-037).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recording_max_seconds: Option<u32>,
+    /// Record the sound the computer plays. Off by default (ADR-037); never turned on by itself.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub record_system_audio: bool,
+    /// Record the microphone. Off by default; only turned on once the system allowed it.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub record_microphone: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !value
 }
 
 fn path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -90,6 +104,9 @@ mod tests {
         let file = dir.join("nested").join(FILE_NAME);
         let settings = Settings {
             shortcut: Some("CommandOrControl+Alt+S".into()),
+            recording_max_seconds: Some(60),
+            record_system_audio: true,
+            record_microphone: true,
         };
         write(&file, &settings).expect("write");
         assert_eq!(read(&file), Ok(settings));
@@ -103,6 +120,26 @@ mod tests {
         let file = dir.join(FILE_NAME);
         write(&file, &Settings::default()).expect("write");
         assert_eq!(fs::read_to_string(&file).expect("read"), "{}\n");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn audio_is_off_by_default_and_a_choice_is_remembered() {
+        let dir = scratch("audio");
+        let file = dir.join(FILE_NAME);
+        fs::create_dir_all(&dir).expect("dir");
+        fs::write(&file, r#"{"shortcut":"Alt+Shift+X"}"#).expect("write");
+        let stored = read(&file).expect("read");
+        assert!(!stored.record_system_audio && !stored.record_microphone);
+        let chosen = Settings {
+            record_microphone: true,
+            ..stored
+        };
+        write(&file, &chosen).expect("write");
+        let text = fs::read_to_string(&file).expect("read");
+        assert!(text.contains("\"recordMicrophone\": true"), "{text}");
+        assert!(!text.contains("recordSystemAudio"), "{text}");
+        assert_eq!(read(&file), Ok(chosen));
         let _ = fs::remove_dir_all(&dir);
     }
 

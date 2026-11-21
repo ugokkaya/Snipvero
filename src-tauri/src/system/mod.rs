@@ -31,6 +31,14 @@ pub fn open_screen_recording_settings() -> Result<(), String> {
     Err("there is no screen recording permission page on this platform".into())
 }
 
+/// Opens the OS page where microphone permission is granted.
+pub fn open_microphone_settings() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    return macos::open_microphone_settings();
+    #[cfg(not(target_os = "macos"))]
+    Err("there is no microphone permission page on this platform".into())
+}
+
 /// Opens a web page in the default browser. Callers pass fixed addresses only (ADR-024).
 pub fn open_url(url: &str) -> Result<(), String> {
     #[cfg(target_os = "macos")]
